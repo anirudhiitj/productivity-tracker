@@ -13,5 +13,9 @@ fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
 
-# AI & Categorization
+# AI & Categorization (Optional)
+# Set GEMINI_API_KEY environment variable to enable AI website categorization.
+# If not installed, the app gracefully falls back to heuristic categorization.
+# To install: pip install google-generativeai
+# To skip: remove this line (app will work without it)
 google-generativeai==0.3.1

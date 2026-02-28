@@ -2,10 +2,17 @@
   "name": "productivity-tracker-ui",
   "version": "1.0.0",
   "type": "module",
+  "main": "public/main.js",
+  "homepage": "./",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-build": "npm run build && electron-builder",
+    "electron-build-win": "npm run build && electron-builder -w",
+    "electron-build-all": "npm run build && electron-builder -wml",
+    "dist": "npm run electron-build-win"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -13,7 +20,45 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^40.6.1",
+    "electron-builder": "^26.8.1",
     "terser": "^5.46.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "wait-on": "^9.0.4"
+  },
+    "build": {
+    "appId": "com.focusrank.tracker",
+    "productName": "FocusRank",
+    "directories": {
+      "buildResources": "public",
+      "output": "dist_electron"
+    },
+    "files": [
+      "package.json",
+      {
+        "from": "dist",
+        "to": "dist"
+      },
+      "public/main.js",
+      "public/preload.js",
+      "public/icon.png",
+      {
+        "from": "node_modules",
+        "to": "node_modules"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.png",
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false
+    }
   }
 }

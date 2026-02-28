@@ -4,27 +4,53 @@ FastAPI routes for process monitoring endpoints.
 
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
-
-from backend.process_monitor import ProcessMonitor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["processes"])
 
-# Initialize process monitor
-process_monitor = ProcessMonitor()
+# Lazy initialization - ProcessMonitor is heavy and may fail on some systems
+process_monitor: Optional['ProcessMonitor'] = None
+
+def get_process_monitor():
+    """Lazily initialize ProcessMonitor on first use."""
+    global process_monitor
+    if process_monitor is None:
+        try:
+            from backend.process_monitor import ProcessMonitor
+            process_monitor = ProcessMonitor()
+            logger.info("ProcessMonitor initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize ProcessMonitor: {e}", exc_info=True)
+            # Return a dummy object that won't crash the app
+            class DummyMonitor:
+                def get_main_processes(self): return []
+                def get_process_stats(self): return {"total": 0}
+            process_monitor = DummyMonitor()
+    return process_monitor
 
 
 @router.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "service": "productivity_tracker_backend"
-    }
+    try:
+        monitor = get_process_monitor()
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "service": "productivity_tracker_backend",
+            "monitor_available": True
+        }
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return {
+            "status": "ok",
+            "timestamp": datetime.now().isoformat(),
+            "service": "productivity_tracker_backend",
+            "monitor_available": False
+        }
 
 
 @router.get("/processes/main")
@@ -38,8 +64,9 @@ async def get_main_processes():
     - Sorted by memory usage (descending)
     """
     try:
-        processes = process_monitor.get_main_processes()
-        stats = process_monitor.get_process_stats()
+        monitor = get_process_monitor()
+        processes = monitor.get_main_processes()
+        stats = monitor.get_process_stats()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -59,7 +86,8 @@ async def get_all_processes():
     Warning: May return 200+ processes. Use /processes/main for filtered view.
     """
     try:
-        processes = process_monitor.get_all_processes()
+        monitor = get_process_monitor()
+        processes = monitor.get_all_processes()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -75,7 +103,8 @@ async def get_all_processes():
 async def get_process_stats():
     """Get aggregate statistics of main processes."""
     try:
-        stats = process_monitor.get_process_stats()
+        monitor = get_process_monitor()
+        stats = monitor.get_process_stats()
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -94,7 +123,8 @@ async def get_processes_by_category(category: str):
     Category options: Productive, Gaming, Educational, Entertainment, Neutral
     """
     try:
-        all_processes = process_monitor.get_main_processes()
+        monitor = get_process_monitor()
+        all_processes = monitor.get_main_processes()
 
         # Filter by category (case-insensitive)
         filtered = [p for p in all_processes if p.get('category', '').lower() == category.lower()]

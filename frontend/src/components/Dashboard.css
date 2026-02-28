@@ -317,3 +317,322 @@
     flex-direction: column;
   }
 }
+/* ============================================ */
+/* Process Table Styles */
+/* ============================================ */
+
+.process-table-section {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid var(--border);
+}
+
+.table-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.table-stats {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.table-stats span {
+  font-weight: 500;
+}
+
+.process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.process-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.process-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.process-row {
+  padding: 14px 16px;
+  background:var(--bg);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.process-row:hover {
+  background: var(--hover-bg);
+}
+
+.row-content {
+  display: grid;
+  grid-template-columns: 2.5fr 1.2fr 1fr 0.8fr 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.expand-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 10px;
+  color: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.process-icon {
+  font-size: 20px;
+  margin-right: 10px;
+}
+
+.col-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.name-info strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-title-preview {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-category {
+  display: flex;
+  justify-content: center;
+}
+
+.category-badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.col-memory {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.memory-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.memory-percent {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.col-cpu {
+  text-align: center;
+}
+
+.cpu-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cpu-value.high-cpu {
+  color: #ef4444;
+}
+
+.col-runtime {
+  text-align: center;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.col-user {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Process Details (Expanded) */
+.process-details {
+  padding: 18px 20px;
+  background: var(--panel-bg);
+  border-top: 1px solid var(--border);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.detail-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 13px;
+  min-width: 130px;
+}
+
+.detail-value {
+  color: var(--text-primary);
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.domain-link,
+.url-link {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.domain-link:hover,
+.url-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.source-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Responsive adjustments for process table */
+@media (max-width: 1400px) {
+  .row-content {
+    grid-template-columns: 2fr 1fr 1fr 0.8fr 1fr 0.8fr;
+    gap: 12px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .row-content {
+    grid-template-columns: 2.5fr 1.2fr 1fr 1fr;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .col-runtime,
+  .col-user {
+    display: none;
+  }
+
+  .table-stats {
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  .process-table-section {
+    padding: 15px;
+  }
+
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .row-content {
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .col-cpu {
+    display: none;
+  }
+
+  .process-row {
+    padding: 10px 12px;
+  }
+
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .row-content {
+    grid-template-columns: 2fr 1fr;
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .col-category {
+    display: none;
+  }
+
+  .process-icon {
+    font-size: 16px;
+    margin-right: 6px;
+  }
+
+  .process-row {
+    padding: 8px 10px;
+  }
+}

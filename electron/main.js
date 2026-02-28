@@ -5,26 +5,38 @@
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
-const fs = require('fs');
+const http = require('http');
+const { spawn, execSync } = require('child_process');
 
 let mainWindow;
 let pythonProcess = null;
 const isDev = process.env.NODE_ENV === 'development';
 const BACKEND_PORT = 8000;
+const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 
 // Determine paths for production vs development
-const RESOURCES_PATH = isDev
-  ? path.join(__dirname, '..')
-  : process.resourcesPath;
+const RESOURCES_PATH = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+const BACKEND_EXE_PATH = path.join(RESOURCES_PATH, 'python-backend', 'tracker-backend.exe');
 
-const BACKEND_PATH = isDev
-  ? path.join(RESOURCES_PATH, 'backend')
-  : path.join(RESOURCES_PATH, 'backend', 'backend.exe');
-
-const PYTHON_PATH = isDev
-  ? 'python'  // Use system Python in dev
-  : BACKEND_PATH;  // Use bundled exe in production
+function waitForBackend(retries = 40) {
+  return new Promise((resolve, reject) => {
+    const attempt = (remaining) => {
+      const req = http.get(`${BACKEND_URL}/api/health`, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', () => {
+        if (remaining <= 0) {
+          reject(new Error('Backend did not become ready in time'));
+          return;
+        }
+        setTimeout(() => attempt(remaining - 1), 500);
+      });
+      req.setTimeout(1000, () => req.destroy());
+    };
+    attempt(retries);
+  });
+}
 
 /**
  * Start the FastAPI backend server
@@ -32,26 +44,28 @@ const PYTHON_PATH = isDev
 function startPythonBackend() {
   return new Promise((resolve, reject) => {
     console.log('[Backend] Starting Python backend...');
-    console.log('[Backend] Path:', PYTHON_PATH);
     console.log('[Backend] Dev mode:', isDev);
 
     try {
       if (isDev) {
-        // Development: Run Python directly
         pythonProcess = spawn('python', [
-          '-m', 'uvicorn',
-          'backend.main:app',
-          '--host', '127.0.0.1',
-          '--port', BACKEND_PORT.toString(),
-          '--log-level', 'info'
+          'server.py'
         ], {
           cwd: RESOURCES_PATH,
-          stdio: ['ignore', 'pipe', 'pipe']
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: {
+            ...process.env,
+            TRACKER_BACKEND_PORT: String(BACKEND_PORT)
+          }
         });
       } else {
-        // Production: Run bundled executable
-        pythonProcess = spawn(BACKEND_PATH, [], {
-          stdio: ['ignore', 'pipe', 'pipe']
+        pythonProcess = spawn(BACKEND_EXE_PATH, [], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+          env: {
+            ...process.env,
+            TRACKER_BACKEND_PORT: String(BACKEND_PORT)
+          }
         });
       }
 
@@ -73,11 +87,12 @@ function startPythonBackend() {
         pythonProcess = null;
       });
 
-      // Wait for backend to be ready
-      setTimeout(() => {
-        console.log('[Backend] Backend should be ready');
+      waitForBackend().then(() => {
+        console.log('[Backend] Backend is ready');
         resolve();
-      }, 3000);
+      }).catch((error) => {
+        reject(error);
+      });
 
     } catch (error) {
       console.error('[Backend] Error starting backend:', error);
@@ -92,7 +107,15 @@ function startPythonBackend() {
 function stopPythonBackend() {
   if (pythonProcess) {
     console.log('[Backend] Stopping Python backend...');
-    pythonProcess.kill();
+    if (process.platform === 'win32') {
+      try {
+        execSync(`taskkill /pid ${pythonProcess.pid} /t /f`);
+      } catch (_error) {
+        pythonProcess.kill();
+      }
+    } else {
+      pythonProcess.kill();
+    }
     pythonProcess = null;
   }
 }
@@ -192,7 +215,7 @@ ipcMain.handle('get-backend-status', async () => {
   return {
     running: pythonProcess !== null,
     port: BACKEND_PORT,
-    url: `http://localhost:${BACKEND_PORT}`
+    url: BACKEND_URL
   };
 });
 

@@ -12,6 +12,7 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+    genai = None  # Ensure genai is defined as None so references don't raise NameError
     logger.warning("Google Generative AI not installed. Install with: pip install google-generativeai")
 
 
@@ -78,13 +79,18 @@ CATEGORY: Neutral | CONFIDENCE: 0.5
 """
             
             # Run in thread pool to avoid blocking
-            response = await asyncio.to_thread(
-                self.model.generate_content,
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            if GEMINI_AVAILABLE and genai:
+                generation_config = genai.types.GenerationConfig(
                     max_output_tokens=50,
                     temperature=0.3,  # Low temperature for consistent results
                 )
+            else:
+                generation_config = {"max_output_tokens": 50, "temperature": 0.3}
+
+            response = await asyncio.to_thread(
+                self.model.generate_content,
+                prompt,
+                generation_config=generation_config
             )
             
             # Parse response

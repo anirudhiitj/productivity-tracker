@@ -135,6 +135,13 @@ release/
 # Frontend build
 frontend/dist/
 frontend/build/
+frontend/dist_electron/
+
+# Electron builder metadata
+builder-effective-config.yaml
+builder-debug.yml
+*.builder-debug.yml
+*.builder-effective-config.yaml
 
 # Backend bundled executable
 backend/dist/
@@ -147,3 +154,11 @@ backend/*.spec
 tmp/
 temp/
 tmpclaude-*/
+test_output.txt
+test_error.txt
+test_*.log
+launcher_output.txt
+
+# Environment files
+.env.local
+.env.*.local

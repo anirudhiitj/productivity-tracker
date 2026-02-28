@@ -13,12 +13,12 @@
     "build": "npm run build:frontend && npm run build:backend && npm run build:electron",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "python build_backend.py",
-    "build:electron": "electron-builder --win --x64",
-    "build:portable": "electron-builder --win portable",
+    "build:electron": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64",
+    "build:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --x64",
     "postinstall": "electron-builder install-app-deps",
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build:frontend && npm run build:backend && npm run build:portable"
   },
   "build": {
     "appId": "com.productivity.tracker",
@@ -26,9 +26,6 @@
     "copyright": "Copyright © 2026",
     "compression": "maximum",
     "asar": true,
-    "win": {
-      "sign": false
-    },
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -36,17 +33,12 @@
     "files": [
       "electron/**/*",
       "frontend/dist/**/*",
-      "backend/**/*",
-      "!backend/**/*.pyc",
-      "!backend/**/__pycache__",
-      "!backend/**/*.py",
-      "data/**/*",
       "package.json"
     ],
     "extraResources": [
       {
-        "from": "backend/dist",
-        "to": "backend",
+        "from": "dist/tracker-backend",
+        "to": "python-backend",
         "filter": ["**/*"]
       },
       {
@@ -66,8 +58,10 @@
           "arch": ["x64"]
         }
       ],
+      "signAndEditExecutable": false,
       "artifactName": "${productName}-Setup-${version}.${ext}",
-      "publisherName": "Productivity Tracker Inc."
+      "publisherName": "Productivity Tracker Inc.",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
