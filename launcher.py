@@ -9,6 +9,8 @@ import os
 import time
 import logging
 from pathlib import Path
+import socket
+import psutil
 
 # Setup logging
 logging.basicConfig(
@@ -39,6 +41,24 @@ def check_requirements():
         return False
 
 
+def cleanup_ports(ports=[8000, 3000]):
+    """Kill any existing processes using the specified ports."""
+    for port in ports:
+        try:
+            # Try to find and kill processes using this port
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    for conn in proc.net_connections(kind='inet'):
+                        if conn.laddr.port == port and conn.status == 'LISTEN':
+                            logger.info(f"Killing existing process on port {port} (PID: {proc.pid})")
+                            proc.kill()
+                            time.sleep(1)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    pass
+        except Exception as e:
+            logger.warning(f"Could not cleanup port {port}: {e}")
+
+
 def start_backend():
     """Start FastAPI backend server."""
     logger.info("=" * 60)
@@ -59,6 +79,19 @@ def start_backend():
         logger.info("Backend URL: http://localhost:8000")
         logger.info("API Docs: http://localhost:8000/docs")
         
+        # Give it a moment to start
+        time.sleep(1)
+        
+        # Check if it's still running
+        poll_result = backend_process.poll()
+        if poll_result is not None:
+            # Process exited immediately - something went wrong
+            _, stderr = backend_process.communicate()
+            logger.error(f"Backend process exited immediately with code {poll_result}")
+            if stderr:
+                logger.error(f"Error output: {stderr[:500]}")
+            return None
+        
         return backend_process
         
     except Exception as e:
@@ -77,10 +110,11 @@ def start_frontend():
         logger.info("Installing frontend dependencies (npm install)...")
         try:
             install_result = subprocess.run(
-                ["npm", "install"],
+                "npm install",
                 cwd=FRONTEND_DIR,
                 capture_output=True,
-                timeout=300
+                timeout=300,
+                shell=True
             )
             if install_result.returncode != 0:
                 logger.warning("npm install had warnings, but continuing...")
@@ -90,23 +124,34 @@ def start_frontend():
             return None
     
     try:
+        # Use shell=True on Windows to properly resolve npm command in PATH
         frontend_process = subprocess.Popen(
-            ["npm", "run", "dev"],
+            "npm run dev -- --host 127.0.0.1 --port 3000 --strictPort",
             cwd=FRONTEND_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=True,
+            shell=True
         )
         
         logger.info("Frontend process started (PID: %d)", frontend_process.pid)
         logger.info("Frontend URL: http://localhost:3000")
         
+        # Give it a moment to start
+        time.sleep(2)
+        
+        # Check if it's still running
+        poll_result = frontend_process.poll()
+        if poll_result is not None:
+            # Process exited immediately - something went wrong
+            _, stderr = frontend_process.communicate()
+            logger.error(f"Frontend process exited immediately with code {poll_result}")
+            if stderr:
+                logger.error(f"Error output: {stderr[:500]}")
+            return None
+        
         return frontend_process
         
-    except FileNotFoundError:
-        logger.error("npm not found. Make sure Node.js is installed")
-        logger.info("Download from: https://nodejs.org/")
-        return None
     except Exception as e:
         logger.error(f"Failed to start frontend: {e}")
         return None
@@ -121,6 +166,11 @@ def main():
     # Check Python dependencies
     if not check_requirements():
         sys.exit(1)
+    
+    # Clean up any existing processes on required ports
+    logger.info("Cleaning up old processes...")
+    cleanup_ports([8000, 3000])
+    time.sleep(2)
     
     # Start backend
     backend_process = start_backend()
