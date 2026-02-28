@@ -3,9 +3,10 @@
  * Manages the application lifecycle, creates windows, and handles Python backend
  */
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 const { spawn, execSync } = require('child_process');
 
 let mainWindow;
@@ -13,14 +14,57 @@ let pythonProcess = null;
 const isDev = process.env.NODE_ENV === 'development';
 const BACKEND_PORT = 8000;
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+let appLogFile = null;
+let backendLogFile = null;
 
 // Determine paths for production vs development
 const RESOURCES_PATH = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 const BACKEND_EXE_PATH = path.join(RESOURCES_PATH, 'python-backend', 'tracker-backend.exe');
 
+function safeString(value) {
+  if (value === undefined || value === null) return '';
+  return String(value);
+}
+
+function writeLog(level, message, details = '') {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] [${level}] ${message}${details ? `\n${details}` : ''}\n`;
+  const printer = level === 'ERROR' ? console.error : console.log;
+  printer(line.trim());
+  if (!appLogFile) return;
+  try {
+    fs.appendFileSync(appLogFile, line, 'utf8');
+  } catch (_error) {
+    // Ignore log write failures
+  }
+}
+
+function setupLogging() {
+  try {
+    const userDataPath = app.getPath('userData');
+    const logDir = path.join(userDataPath, 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    appLogFile = path.join(logDir, 'electron-main.log');
+    backendLogFile = path.join(logDir, 'backend.log');
+    writeLog('INFO', 'Logging initialized', `appLogFile=${appLogFile}\nbackendLogFile=${backendLogFile}`);
+  } catch (error) {
+    console.error('[App] Failed to initialize logging', error);
+  }
+}
+
 function waitForBackend(retries = 40) {
   return new Promise((resolve, reject) => {
     const attempt = (remaining) => {
+      if (!pythonProcess) {
+        reject(new Error('Backend process is not running'));
+        return;
+      }
+
+      if (pythonProcess.exitCode !== null) {
+        reject(new Error(`Backend process exited early with code ${pythonProcess.exitCode}`));
+        return;
+      }
+
       const req = http.get(`${BACKEND_URL}/api/health`, (res) => {
         res.resume();
         resolve();
@@ -43,10 +87,16 @@ function waitForBackend(retries = 40) {
  */
 function startPythonBackend() {
   return new Promise((resolve, reject) => {
-    console.log('[Backend] Starting Python backend...');
-    console.log('[Backend] Dev mode:', isDev);
+    writeLog('INFO', 'Starting Python backend', `isDev=${isDev}`);
 
     try {
+      if (!isDev && !fs.existsSync(BACKEND_EXE_PATH)) {
+        const error = new Error(`Backend executable not found at: ${BACKEND_EXE_PATH}`);
+        writeLog('ERROR', 'Missing backend executable', safeString(error.stack || error.message));
+        reject(error);
+        return;
+      }
+
       if (isDev) {
         pythonProcess = spawn('python', [
           'server.py'
@@ -55,7 +105,8 @@ function startPythonBackend() {
           stdio: ['ignore', 'pipe', 'pipe'],
           env: {
             ...process.env,
-            TRACKER_BACKEND_PORT: String(BACKEND_PORT)
+            TRACKER_BACKEND_PORT: String(BACKEND_PORT),
+            TRACKER_LOG_FILE: backendLogFile || ''
           }
         });
       } else {
@@ -64,38 +115,42 @@ function startPythonBackend() {
           windowsHide: true,
           env: {
             ...process.env,
-            TRACKER_BACKEND_PORT: String(BACKEND_PORT)
+            TRACKER_BACKEND_PORT: String(BACKEND_PORT),
+            TRACKER_LOG_FILE: backendLogFile || ''
           }
         });
       }
 
+      writeLog('INFO', 'Backend process spawned', `pid=${pythonProcess.pid || 'unknown'}`);
+
       pythonProcess.stdout.on('data', (data) => {
-        console.log(`[Backend] ${data.toString()}`);
+        writeLog('INFO', '[Backend stdout]', safeString(data));
       });
 
       pythonProcess.stderr.on('data', (data) => {
-        console.error(`[Backend Error] ${data.toString()}`);
+        writeLog('ERROR', '[Backend stderr]', safeString(data));
       });
 
       pythonProcess.on('error', (error) => {
-        console.error('[Backend] Failed to start:', error);
+        writeLog('ERROR', 'Backend failed to start', safeString(error.stack || error.message));
         reject(error);
       });
 
       pythonProcess.on('close', (code) => {
-        console.log(`[Backend] Process exited with code ${code}`);
+        writeLog('ERROR', 'Backend process exited', `code=${code}`);
         pythonProcess = null;
       });
 
       waitForBackend().then(() => {
-        console.log('[Backend] Backend is ready');
+        writeLog('INFO', 'Backend is ready', BACKEND_URL);
         resolve();
       }).catch((error) => {
+        writeLog('ERROR', 'Backend healthcheck failed', safeString(error.stack || error.message));
         reject(error);
       });
 
     } catch (error) {
-      console.error('[Backend] Error starting backend:', error);
+      writeLog('ERROR', 'Unexpected backend startup error', safeString(error.stack || error.message));
       reject(error);
     }
   });
@@ -106,7 +161,7 @@ function startPythonBackend() {
  */
 function stopPythonBackend() {
   if (pythonProcess) {
-    console.log('[Backend] Stopping Python backend...');
+    writeLog('INFO', 'Stopping Python backend', `pid=${pythonProcess.pid}`);
     if (process.platform === 'win32') {
       try {
         execSync(`taskkill /pid ${pythonProcess.pid} /t /f`);
@@ -124,7 +179,7 @@ function stopPythonBackend() {
  * Create the main application window
  */
 async function createWindow() {
-  console.log('[App] Creating main window...');
+  writeLog('INFO', 'Creating main window');
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -145,7 +200,7 @@ async function createWindow() {
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
-    console.log('[App] Window ready to show');
+    writeLog('INFO', 'Window ready to show');
     mainWindow.show();
   });
 
@@ -169,7 +224,8 @@ async function createWindow() {
  */
 async function initializeApp() {
   try {
-    console.log('[App] Initializing application...');
+    setupLogging();
+    writeLog('INFO', 'Initializing application', `resourcesPath=${RESOURCES_PATH}\nbackendExePath=${BACKEND_EXE_PATH}`);
     
     // Start Python backend first
     await startPythonBackend();
@@ -177,9 +233,14 @@ async function initializeApp() {
     // Then create window
     await createWindow();
     
-    console.log('[App] Application initialized successfully');
+    writeLog('INFO', 'Application initialized successfully');
   } catch (error) {
-    console.error('[App] Failed to initialize:', error);
+    const message = safeString(error && (error.stack || error.message || error));
+    writeLog('ERROR', 'Application failed to initialize', message);
+    await dialog.showErrorBox(
+      'Productivity Tracker failed to start',
+      `The app could not start correctly.\n\nCheck logs:\n${appLogFile || 'electron-main.log'}\n${backendLogFile || 'backend.log'}\n\nError:\n${message}`
+    );
     app.quit();
   }
 }
@@ -228,9 +289,9 @@ ipcMain.handle('restart-backend', async () => {
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('[App] Uncaught exception:', error);
+  writeLog('ERROR', 'Uncaught exception', safeString(error && (error.stack || error.message || error)));
 });
 
 process.on('unhandledRejection', (error) => {
-  console.error('[App] Unhandled rejection:', error);
+  writeLog('ERROR', 'Unhandled rejection', safeString(error && (error.stack || error.message || error)));
 });

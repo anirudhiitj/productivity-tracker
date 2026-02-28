@@ -22,11 +22,27 @@ else:
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 # Configure logging BEFORE importing app
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+handlers = [logging.StreamHandler(sys.stdout)]
+
+log_file_env = os.environ.get("TRACKER_LOG_FILE", "").strip()
+if log_file_env:
+    log_file_path = Path(log_file_env)
+elif getattr(sys, "frozen", False):
+    log_file_path = runtime_dir / "agent.log"
+else:
+    log_file_path = Path(__file__).resolve().parent / "agent.log"
+
+try:
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    handlers.append(logging.FileHandler(log_file_path, encoding='utf-8'))
+except Exception:
+    pass
+
+logging.basicConfig(level=logging.INFO, format=log_format, handlers=handlers)
 logger = logging.getLogger(__name__)
+logger.info(f"Logging to: {log_file_path}")
+logger.info(f"Runtime directory: {runtime_dir}")
 
 try:
     from backend.main import app
