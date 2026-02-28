@@ -1,5 +1,5 @@
 /**
- * App Global Styles - Clean white background
+ * App Global Styles - Theme tokens + minimal dashboard layout
  */
 
 * {
@@ -9,15 +9,41 @@
 }
 
 :root {
-  --primary-color: #3b82f6;
-  --success-color: #10b981;
-  --danger-color: #ef4444;
-  --warning-color: #f59e0b;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --border-color: #e5e7eb;
-  --bg-light: #f9fafb;
-  --bg-white: #ffffff;
+  --bg: #0b1020;
+  --panel-bg: #131a2e;
+  --row-bg: #0f1628;
+  --button-bg: #1a2340;
+  --text-primary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border: #28314f;
+  --border-soft: #1f2943;
+  --accent: #60a5fa;
+  --accent-soft: rgba(96, 165, 250, 0.12);
+  --ok-bg: rgba(16, 185, 129, 0.12);
+  --ok-text: #34d399;
+  --ok-border: rgba(16, 185, 129, 0.4);
+  --bad-bg: rgba(239, 68, 68, 0.12);
+  --bad-text: #f87171;
+  --bad-border: rgba(239, 68, 68, 0.4);
+}
+
+:root[data-theme='light'] {
+  --bg: #f5f7fb;
+  --panel-bg: #ffffff;
+  --row-bg: #f8fafc;
+  --button-bg: #eef2ff;
+  --text-primary: #111827;
+  --text-muted: #6b7280;
+  --border: #dbe3f0;
+  --border-soft: #e5eaf4;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.09);
+  --ok-bg: #ecfdf5;
+  --ok-text: #047857;
+  --ok-border: #a7f3d0;
+  --bad-bg: #fef2f2;
+  --bad-text: #b91c1c;
+  --bad-border: #fecaca;
 }
 
 html, body {
@@ -26,7 +52,7 @@ html, body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-white);
+  background-color: var(--bg);
   color: var(--text-primary);
 }
 
@@ -37,25 +63,13 @@ code {
 
 .app {
   min-height: 100vh;
-  background-color: var(--bg-white);
+  background-color: var(--bg);
   padding: 20px;
 }
 
 .app-container {
-  max-width: 1400px;
+  max-width: 1320px;
   margin: 0 auto;
-}
-
-.connection-status {
-  margin-top: 20px;
-  padding: 12px 16px;
-  background-color: #ecfdf5;
-  border-left: 3px solid var(--success-color);
-  border-radius: 4px;
-  color: #047857;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: center;
 }
 
 /* Scrollbar styling */
@@ -65,16 +79,16 @@ code {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-light);
+  background: var(--panel-bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--text-muted);
 }
 
 /* Print styles */
@@ -84,11 +98,8 @@ code {
   }
 }
 
-/* Light theme only - no dark mode */
-@media (prefers-color-scheme: dark) {
-  /* Force light theme even if device prefers dark */
-  html, body {
-    background-color: var(--bg-white);
-    color: var(--text-primary);
+@media (max-width: 680px) {
+  .app {
+    padding: 12px;
   }
 }
