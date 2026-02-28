@@ -40,8 +40,12 @@ def build_backend() -> None:
     add_data = [
         f"{ROOT_DIR / 'backend'};backend",
         f"{ROOT_DIR / 'client'};client",
-        f"{ROOT_DIR / 'data'};data",
     ]
+
+    # Only include data dir if it exists and has content
+    data_dir = ROOT_DIR / "data"
+    if data_dir.exists() and any(data_dir.iterdir()):
+        add_data.append(f"{data_dir};data")
 
     hidden_imports = [
         # Win32 APIs for window enumeration

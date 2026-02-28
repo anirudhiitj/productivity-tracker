@@ -12,9 +12,10 @@ Write-Host "=====================================================`n" -Foreground
 Write-Host "     FocusRank - Productivity Tracker`n" -ForegroundColor Green
 Write-Host "=====================================================`n" -ForegroundColor Cyan
 
-# Define paths
-$backendPath = "c:\Users\Admin\Desktop\productivity_tracker\dist\tracker-backend\tracker-backend.exe"
-$appPath = "c:\Users\Admin\Desktop\productivity_tracker\frontend\dist_electron\FocusRank 1.0.0.exe"
+# Define paths relative to script location
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$backendPath = Join-Path $scriptDir "dist\tracker-backend\tracker-backend.exe"
+$appPath = Join-Path $scriptDir "frontend\dist_electron\FocusRank 1.0.0.exe"
 
 # [1] Start Backend
 Write-Host "[1/2] Starting backend server..." -ForegroundColor Yellow

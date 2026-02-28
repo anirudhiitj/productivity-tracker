@@ -1,6 +1,9 @@
 @echo off
 REM Quick launcher for FocusRank - Productivity Tracker
 
+REM Resolve paths relative to this script's directory
+set "SCRIPT_DIR=%~dp0"
+
 echo =====================================================================
 echo      FocusRank - Productivity Tracker Desktop App
 echo =====================================================================
@@ -8,7 +11,7 @@ echo.
 
 REM Start backend
 echo [1/2] Starting backend server...
-start "FocusRank Backend" /MIN "c:\Users\Admin\Desktop\productivity_tracker\dist\tracker-backend\tracker-backend.exe"
+start "FocusRank Backend" /MIN "%SCRIPT_DIR%dist\tracker-backend\tracker-backend.exe"
 echo   Backend: http://localhost:8000
 echo.
 
@@ -21,7 +24,7 @@ echo.
 REM Start Electron app
 echo Launching FocusRank application...
 echo.
-start "" "c:\Users\Admin\Desktop\productivity_tracker\frontend\dist_electron\FocusRank 1.0.0.exe"
+start "" "%SCRIPT_DIR%frontend\dist_electron\FocusRank 1.0.0.exe"
 
 echo.
 echo ✅ All systems started!
