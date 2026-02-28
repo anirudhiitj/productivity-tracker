@@ -14,7 +14,7 @@ cd frontend && npm run dev
 ```
 
 ### Step 2: Open the Dashboard
-Visit **http://localhost:3001** (or 3000 if 3001 is busy)
+Visit **http://localhost:3000**
 
 ---
 
@@ -237,8 +237,8 @@ productivity_tracker/
 This is just a warning. The system works fine without it using heuristics.
 To enable: `pip install google-generativeai`
 
-### "Port 3001 instead of 3000"
-Vite automatically tries next available port. Both work!
+### "Port 3000 already in use"
+Frontend is locked to **3000 only**. Free port 3000 and restart.
 
 ### "No domains showing up"
 - Pure non-browser processes won't have domains

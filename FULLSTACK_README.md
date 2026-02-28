@@ -252,7 +252,8 @@ taskkill /PID <PID> /F
 ```
 
 ### "Port 3000 already in use"
-Frontend will try next available port (3001, 3002, etc).
+Frontend is configured to run on **3000 only** (`strictPort: true`).
+Free port 3000, then restart frontend.
 
 ### Process list is empty
 - Your processes may be using < 100MB RAM and < 1% CPU
