@@ -22,6 +22,18 @@ const formatTime = (seconds) => {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 };
 
+const BROWSER_NAMES = ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'chrome', 'firefox', 'msedge', 'opera', 'brave'];
+
+const isBrowser = (name) => BROWSER_NAMES.includes((name || '').toLowerCase());
+
+const getDisplayName = (proc) => {
+  if (isBrowser(proc.name)) {
+    if (proc.window_title) return proc.window_title.length > 60 ? proc.window_title.substring(0, 57) + '...' : proc.window_title;
+    if (proc.domain) return proc.domain;
+  }
+  return proc.name;
+};
+
 const getProcessIcon = (name) => {
   const n = (name || '').toLowerCase();
   if (n.includes('chrome') || n.includes('firefox') || n.includes('edge') || n.includes('brave')) return '🌐';
@@ -127,10 +139,10 @@ export function OverviewPage({ processes, stats, loading, error, isConnected, la
             <span className="kpi-icon" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             </span>
-            <span className="kpi-label">Tier</span>
+            <span className="kpi-label">Tier & Rank</span>
           </div>
           <p className="kpi-value" style={{ color: TIER_COLORS[model?.tier] || 'var(--text-primary)' }}>
-            {model?.tier || 'Iron'}
+            {model?.tier || 'Iron'} <span className="rank-inline">#{model?.rank || '-'}</span>
           </p>
           <span className="kpi-sub">{model?.percentile?.toFixed(0) || 0}th percentile</span>
         </div>
@@ -249,8 +261,9 @@ export function OverviewPage({ processes, stats, loading, error, isConnected, la
               <div className="activity-row" key={`${act.pid}-${i}`}>
                 <span className="act-icon">{getProcessIcon(act.name)}</span>
                 <div className="act-info">
-                  <strong>{act.name}</strong>
-                  <p>{act.window_title || act.domain || 'No title'}</p>
+                  <strong>{getDisplayName(act)}</strong>
+                  {isBrowser(act.name) && act.domain && <p>{act.domain}</p>}
+                  {!isBrowser(act.name) && <p>{act.window_title || act.domain || 'No title'}</p>}
                 </div>
                 <div className="act-meta">
                   <span className={`mini-badge badge-${(act.category || 'neutral').toLowerCase()}`}>

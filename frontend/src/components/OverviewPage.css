@@ -124,6 +124,14 @@
   color: var(--text-secondary);
 }
 
+.rank-inline {
+  font-size: 0.5em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: 6px;
+  opacity: 0.85;
+}
+
 .kpi-sub {
   display: block;
   margin-top: 8px;

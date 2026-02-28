@@ -30,6 +30,18 @@ const SOURCE_LABELS = {
   'error': '❌ Error'
 };
 
+const BROWSER_NAMES = ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'chrome', 'firefox', 'msedge', 'opera', 'brave'];
+
+const isBrowser = (name) => BROWSER_NAMES.includes((name || '').toLowerCase());
+
+const getDisplayName = (proc) => {
+  if (isBrowser(proc.name)) {
+    if (proc.window_title) return proc.window_title.length > 60 ? proc.window_title.substring(0, 57) + '...' : proc.window_title;
+    if (proc.domain) return proc.domain;
+  }
+  return proc.name;
+};
+
 export const ProcessTable = ({ processes, loading, error, stats }) => {
   const [expandedRow, setExpandedRow] = useState(null);
 
@@ -107,7 +119,10 @@ export const ProcessTable = ({ processes, loading, error, stats }) => {
                       {expandedRow === proc.pid ? '▼' : '▶'}
                     </span>
                     <span className="process-icon">⚙️</span>
-                    <span className="process-name">{proc.name}</span>
+                    <span className="process-name">{getDisplayName(proc)}</span>
+                    {isBrowser(proc.name) && proc.domain && (
+                      <span className="process-domain-hint">{proc.domain}</span>
+                    )}
                   </div>
                   
                   <div className="col-category">

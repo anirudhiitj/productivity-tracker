@@ -30,6 +30,18 @@ const formatTime = (seconds) => {
   return `${hours}h ${minutes % 60}m`;
 };
 
+const BROWSER_NAMES = ['chrome.exe', 'firefox.exe', 'msedge.exe', 'opera.exe', 'brave.exe', 'chrome', 'firefox', 'msedge', 'opera', 'brave'];
+
+const isBrowser = (name) => BROWSER_NAMES.includes((name || '').toLowerCase());
+
+const getDisplayName = (proc) => {
+  if (isBrowser(proc.name)) {
+    if (proc.window_title) return proc.window_title.length > 60 ? proc.window_title.substring(0, 57) + '...' : proc.window_title;
+    if (proc.domain) return proc.domain;
+  }
+  return proc.name;
+};
+
 const getProcessIcon = (name) => {
   const lowerName = (name || '').toLowerCase();
   if (lowerName.includes('chrome') || lowerName.includes('firefox') || lowerName.includes('edge')) return '🌐';
@@ -131,8 +143,8 @@ export function Dashboard({
               <small>Conservative: Ri = μi - 2σi</small>
             </article>
             <article className="kpi-card">
-              <h3>Tier</h3>
-              <p className={`kpi-value ${tierClass[model.tier]}`}>{model.tier}</p>
+              <h3>Tier & Rank</h3>
+              <p className={`kpi-value ${tierClass[model.tier]}`}>{model.tier} <span className="rank-inline">#{model.rank}</span></p>
               <small>{model.percentile.toFixed(1)} percentile</small>
             </article>
             <article className="kpi-card">
@@ -166,8 +178,13 @@ export function Dashboard({
                         <div className="activity-main">
                           <span className="activity-icon">{getProcessIcon(activity.name)}</span>
                           <div>
-                            <strong>{activity.name}</strong>
-                            <p>{activity.window_title || activity.domain || 'No title available'}</p>
+                            <strong>{getDisplayName(activity)}</strong>
+                            {isBrowser(activity.name) && activity.domain && (
+                              <p className="activity-domain">{activity.domain}</p>
+                            )}
+                            {!isBrowser(activity.name) && (
+                              <p>{activity.window_title || activity.domain || 'No title available'}</p>
+                            )}
                           </div>
                         </div>
                         <div className="activity-meta">
@@ -249,8 +266,11 @@ export function Dashboard({
                             <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
                             <span className="process-icon">{getProcessIcon(proc.name)}</span>
                             <div className="name-info">
-                              <strong>{proc.name}</strong>
-                              {proc.window_title && (
+                              <strong>{getDisplayName(proc)}</strong>
+                              {isBrowser(proc.name) && proc.domain && (
+                                <small className="window-title-preview">{proc.domain}</small>
+                              )}
+                              {!isBrowser(proc.name) && proc.window_title && (
                                 <small className="window-title-preview">
                                   {proc.window_title.substring(0, 80)}{proc.window_title.length > 80 ? '...' : ''}
                                 </small>
