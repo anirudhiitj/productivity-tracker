@@ -44,11 +44,48 @@ def build_backend() -> None:
     ]
 
     hidden_imports = [
+        # Win32 APIs for window enumeration
         "win32api",
         "win32con",
         "win32process",
-        "google.generativeai",  # Optional - included if installed, gracefully fails if not
+        "win32gui",
+        # FastAPI / Uvicorn
+        "uvicorn",
+        "uvicorn.logging",
+        "uvicorn.loops",
+        "uvicorn.loops.auto",
+        "uvicorn.protocols",
+        "uvicorn.protocols.http",
+        "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.websockets",
+        "uvicorn.protocols.websockets.auto",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
+        "uvicorn.lifespan.off",
+        "fastapi",
+        "pydantic",
+        "starlette",
+        # psutil for process monitoring
+        "psutil",
+        # ctypes for window enumeration
+        "ctypes",
+        "ctypes.wintypes",
+        # sqlite3 for website cache
+        "sqlite3",
+        # Encoding support
+        "encodings",
+        "encodings.utf_8",
+        "encodings.ascii",
+        "encodings.latin_1",
+        "encodings.cp1252",
     ]
+
+    # Optional: Google Generative AI
+    try:
+        import google.generativeai  # noqa: F401
+        hidden_imports.append("google.generativeai")
+    except ImportError:
+        pass
 
     cmd = [
         sys.executable,
@@ -79,7 +116,7 @@ def build_backend() -> None:
         import google.generativeai  # noqa: F401
         cmd.extend(["--collect-all", "google"])
     except ImportError:
-        pass  # google-generativeai not installed, skip
+        pass
     
     cmd.append("server.py")
 

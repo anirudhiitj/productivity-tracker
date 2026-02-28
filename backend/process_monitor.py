@@ -53,6 +53,7 @@ class ProcessMonitor:
     def get_all_processes(self) -> List[Dict]:
         """
         Get all running processes with resource info.
+        Optimized: avoids slow username lookups and uses minimal attrs.
 
         Returns:
             List of process dictionaries with full info.
@@ -60,21 +61,25 @@ class ProcessMonitor:
         processes = []
 
         try:
-            for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent']):
+            # Only request fast attributes - username is VERY slow on Windows
+            for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent', 'create_time']):
                 try:
-                    proc_info = proc.as_dict(attrs=['pid', 'name', 'memory_info', 'cpu_percent', 'username', 'create_time'])
+                    info = proc.info
+                    mem_info = info.get('memory_info')
+                    if not mem_info:
+                        continue
                     
-                    memory_mb = proc_info['memory_info'].rss / (1024 * 1024)
-                    cpu_percent = proc_info['cpu_percent'] if proc_info['cpu_percent'] is not None else 0.0
+                    memory_mb = mem_info.rss / (1024 * 1024)
+                    cpu_percent = info.get('cpu_percent') or 0.0
                     
                     process_dict = {
-                        'pid': proc_info['pid'],
-                        'name': proc_info['name'],
+                        'pid': info['pid'],
+                        'name': info['name'] or 'Unknown',
                         'memory_mb': round(memory_mb, 2),
                         'memory_percent': 0,  # Will calculate below
                         'cpu_percent': round(cpu_percent, 2),
-                        'username': proc_info['username'] if proc_info['username'] else 'System',
-                        'create_time': proc_info['create_time'],
+                        'username': 'User',  # Skip slow username lookup
+                        'create_time': info.get('create_time') or 0,
                     }
                     
                     processes.append(process_dict)
@@ -396,17 +401,22 @@ class ProcessMonitor:
                 window_title=window_title
             )
 
-    def get_process_stats(self) -> Dict:
+    def get_process_stats(self, main_processes: List[Dict] = None) -> Dict:
         """
         Get aggregate statistics of main processes.
+        Accepts pre-fetched processes to avoid double-scan.
+
+        Args:
+            main_processes: Optional pre-fetched process list.
 
         Returns:
             Statistics dictionary.
         """
-        main_processes = self.get_main_processes()
+        if main_processes is None:
+            main_processes = self.get_main_processes()
 
-        total_memory = sum(p['memory_mb'] for p in main_processes)
-        total_cpu = sum(p['cpu_percent'] for p in main_processes)
+        total_memory = sum(p.get('memory_mb', 0) for p in main_processes)
+        total_cpu = sum(p.get('cpu_percent', 0) for p in main_processes)
 
         return {
             'total_processes': len(main_processes),

@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import List, Dict, Optional
 import logging
+import asyncio
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,24 @@ async def get_main_processes():
     """
     try:
         monitor = get_process_monitor()
-        processes = monitor.get_main_processes()
-        stats = monitor.get_process_stats()
+        
+        # Run get_main_processes in a thread with timeout to prevent hanging
+        loop = asyncio.get_event_loop()
+        try:
+            processes = await asyncio.wait_for(
+                loop.run_in_executor(None, monitor.get_main_processes),
+                timeout=15.0  # 15 second timeout
+            )
+            # Pass pre-fetched processes to stats to avoid double-scan
+            stats = monitor.get_process_stats(main_processes=processes)
+        except asyncio.TimeoutError:
+            logger.error("Timeout getting processes - returning empty result")
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "processes": [],
+                "stats": {"total_processes": 0, "total_memory_mb": 0, "total_cpu_percent": 0},
+                "error": "Request timed out"
+            }
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -74,7 +92,7 @@ async def get_main_processes():
             "stats": stats
         }
     except Exception as e:
-        logger.error(f"Error getting main processes: {e}")
+        logger.error(f"Error getting main processes: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -87,7 +105,22 @@ async def get_all_processes():
     """
     try:
         monitor = get_process_monitor()
-        processes = monitor.get_all_processes()
+        
+        # Run get_all_processes in a thread with timeout
+        loop = asyncio.get_event_loop()
+        try:
+            processes = await asyncio.wait_for(
+                loop.run_in_executor(None, monitor.get_all_processes),
+                timeout=10.0  # 10 second timeout
+            )
+        except asyncio.TimeoutError:
+            logger.error("Timeout getting all processes - returning empty result")
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "process_count": 0,
+                "processes": [],
+                "error": "Request timed out"
+            }
 
         return {
             "timestamp": datetime.now().isoformat(),
@@ -95,7 +128,7 @@ async def get_all_processes():
             "processes": processes
         }
     except Exception as e:
-        logger.error(f"Error getting all processes: {e}")
+        logger.error(f"Error getting all processes: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

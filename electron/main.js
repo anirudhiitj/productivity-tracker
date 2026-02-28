@@ -3,17 +3,21 @@
  * Manages the application lifecycle, creates windows, and handles Python backend
  */
 
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const path = require('path');
-const http = require('http');
-const fs = require('fs');
-const { spawn, execSync } = require('child_process');
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import path from 'path';
+import http from 'http';
+import fs from 'fs';
+import { spawn, execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow;
 let pythonProcess = null;
 const isDev = process.env.NODE_ENV === 'development';
-const BACKEND_PORT = 8000;
-const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+let BACKEND_PORT = 8000;  // Will be updated after finding free port
+let BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 let appLogFile = null;
 let backendLogFile = null;
 
@@ -24,6 +28,39 @@ const BACKEND_EXE_PATH = path.join(RESOURCES_PATH, 'python-backend', 'tracker-ba
 function safeString(value) {
   if (value === undefined || value === null) return '';
   return String(value);
+}
+
+/**
+ * Find an available port by attempting to bind to ports starting from basePort
+ * Returns a promise that resolves with the free port number
+ */
+function findAvailablePort(basePort = 8000, maxAttempts = 10) {
+  return new Promise((resolve, reject) => {
+    const attempt = (portToTry, attemptsRemaining) => {
+      if (attemptsRemaining <= 0) {
+        reject(new Error(`Could not find available port after trying ports ${basePort}-${basePort + maxAttempts - 1}`));
+        return;
+      }
+
+      const server = http.createServer();
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          // Port is in use, try next
+          setImmediate(() => attempt(portToTry + 1, attemptsRemaining - 1));
+        } else {
+          reject(err);
+        }
+      });
+      server.once('listening', () => {
+        server.close(() => {
+          resolve(portToTry);
+        });
+      });
+      server.listen(portToTry, '127.0.0.1');
+    };
+
+    attempt(basePort, maxAttempts);
+  });
 }
 
 function writeLog(level, message, details = '') {
@@ -86,73 +123,81 @@ function waitForBackend(retries = 40) {
  * Start the FastAPI backend server
  */
 function startPythonBackend() {
-  return new Promise((resolve, reject) => {
-    writeLog('INFO', 'Starting Python backend', `isDev=${isDev}`);
+  return findAvailablePort(8000, 10).then((availablePort) => {
+    return new Promise((resolve, reject) => {
+      // Update global port variables
+      BACKEND_PORT = availablePort;
+      BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+      
+      writeLog('INFO', 'Starting Python backend', `isDev=${isDev}, port=${BACKEND_PORT}`);
 
-    try {
-      if (!isDev && !fs.existsSync(BACKEND_EXE_PATH)) {
-        const error = new Error(`Backend executable not found at: ${BACKEND_EXE_PATH}`);
-        writeLog('ERROR', 'Missing backend executable', safeString(error.stack || error.message));
-        reject(error);
-        return;
-      }
+      try {
+        if (!isDev && !fs.existsSync(BACKEND_EXE_PATH)) {
+          const error = new Error(`Backend executable not found at: ${BACKEND_EXE_PATH}`);
+          writeLog('ERROR', 'Missing backend executable', safeString(error.stack || error.message));
+          reject(error);
+          return;
+        }
 
-      if (isDev) {
-        pythonProcess = spawn('python', [
-          'server.py'
-        ], {
-          cwd: RESOURCES_PATH,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: {
-            ...process.env,
-            TRACKER_BACKEND_PORT: String(BACKEND_PORT),
-            TRACKER_LOG_FILE: backendLogFile || ''
-          }
+        if (isDev) {
+          pythonProcess = spawn('python', [
+            'server.py'
+          ], {
+            cwd: RESOURCES_PATH,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: {
+              ...process.env,
+              TRACKER_BACKEND_PORT: String(BACKEND_PORT),
+              TRACKER_LOG_FILE: backendLogFile || ''
+            }
+          });
+        } else {
+          pythonProcess = spawn(BACKEND_EXE_PATH, [], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            windowsHide: true,
+            env: {
+              ...process.env,
+              TRACKER_BACKEND_PORT: String(BACKEND_PORT),
+              TRACKER_LOG_FILE: backendLogFile || ''
+            }
+          });
+        }
+
+        writeLog('INFO', 'Backend process spawned', `pid=${pythonProcess.pid || 'unknown'}`);
+
+        pythonProcess.stdout.on('data', (data) => {
+          writeLog('INFO', '[Backend stdout]', safeString(data));
         });
-      } else {
-        pythonProcess = spawn(BACKEND_EXE_PATH, [], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          windowsHide: true,
-          env: {
-            ...process.env,
-            TRACKER_BACKEND_PORT: String(BACKEND_PORT),
-            TRACKER_LOG_FILE: backendLogFile || ''
-          }
+
+        pythonProcess.stderr.on('data', (data) => {
+          writeLog('ERROR', '[Backend stderr]', safeString(data));
         });
+
+        pythonProcess.on('error', (error) => {
+          writeLog('ERROR', 'Backend failed to start', safeString(error.stack || error.message));
+          reject(error);
+        });
+
+        pythonProcess.on('close', (code) => {
+          writeLog('ERROR', 'Backend process exited', `code=${code}`);
+          pythonProcess = null;
+        });
+
+        waitForBackend().then(() => {
+          writeLog('INFO', 'Backend is ready', BACKEND_URL);
+          resolve();
+        }).catch((error) => {
+          writeLog('ERROR', 'Backend healthcheck failed', safeString(error.stack || error.message));
+          reject(error);
+        });
+      } catch (error) {
+        writeLog('ERROR', 'Failed to spawn backend', safeString(error.stack || error.message));
+        reject(error);
       }
-
-      writeLog('INFO', 'Backend process spawned', `pid=${pythonProcess.pid || 'unknown'}`);
-
-      pythonProcess.stdout.on('data', (data) => {
-        writeLog('INFO', '[Backend stdout]', safeString(data));
-      });
-
-      pythonProcess.stderr.on('data', (data) => {
-        writeLog('ERROR', '[Backend stderr]', safeString(data));
-      });
-
-      pythonProcess.on('error', (error) => {
-        writeLog('ERROR', 'Backend failed to start', safeString(error.stack || error.message));
-        reject(error);
-      });
-
-      pythonProcess.on('close', (code) => {
-        writeLog('ERROR', 'Backend process exited', `code=${code}`);
-        pythonProcess = null;
-      });
-
-      waitForBackend().then(() => {
-        writeLog('INFO', 'Backend is ready', BACKEND_URL);
-        resolve();
-      }).catch((error) => {
-        writeLog('ERROR', 'Backend healthcheck failed', safeString(error.stack || error.message));
-        reject(error);
-      });
-
-    } catch (error) {
-      writeLog('ERROR', 'Unexpected backend startup error', safeString(error.stack || error.message));
-      reject(error);
-    }
+    });
+  }).catch((error) => {
+    writeLog('ERROR', 'Failed to find available port', safeString(error.stack || error.message));
+    return Promise.reject(error);
   });
 }
 

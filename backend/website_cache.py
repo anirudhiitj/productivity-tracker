@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import threading
 from typing import Optional, Tuple, Dict
 from pathlib import Path
 import logging
@@ -13,6 +14,7 @@ class WebsiteCacheDB:
     """
     SQLite-based cache for website categorizations.
     Stores domain → (category, confidence, timestamp) mappings.
+    Thread-safe: uses a lock and creates cursors per-operation.
     """
     
     DB_PATH = Path(__file__).parent.parent / "data" / "website_cache.db"
@@ -22,23 +24,26 @@ class WebsiteCacheDB:
         # Ensure data directory exists
         self.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         
+        self._lock = threading.Lock()
         self.conn = sqlite3.connect(str(self.DB_PATH), check_same_thread=False)
-        self.cursor = self.conn.cursor()
         self._create_table()
     
     def _create_table(self):
         """Create website_cache table if it doesn't exist."""
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS website_cache (
-                domain TEXT PRIMARY KEY,
-                category TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                source TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        self.conn.commit()
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS website_cache (
+                    domain TEXT PRIMARY KEY,
+                    category TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    source TEXT NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            self.conn.commit()
+            cur.close()
     
     def get(self, domain: str) -> Optional[Tuple[str, float, str]]:
         """
@@ -51,11 +56,14 @@ class WebsiteCacheDB:
             Tuple of (category, confidence, source) or None if not cached
         """
         try:
-            self.cursor.execute(
-                "SELECT category, confidence, source FROM website_cache WHERE domain = ?",
-                (domain,)
-            )
-            result = self.cursor.fetchone()
+            with self._lock:
+                cur = self.conn.cursor()
+                cur.execute(
+                    "SELECT category, confidence, source FROM website_cache WHERE domain = ?",
+                    (domain,)
+                )
+                result = cur.fetchone()
+                cur.close()
             if result:
                 logger.debug(f"Cache hit for {domain}: {result[0]} ({result[1]})")
                 return result
@@ -67,42 +75,39 @@ class WebsiteCacheDB:
     def set(self, domain: str, category: str, confidence: float, source: str = "gemini"):
         """
         Cache a website categorization.
-        
-        Args:
-            domain: Website domain
-            category: Assigned category
-            confidence: Confidence score (0.0-1.0)
-            source: Source of categorization (manual, gemini, heuristic, dictionary)
         """
         try:
-            self.cursor.execute("""
-                INSERT OR REPLACE INTO website_cache 
-                (domain, category, confidence, source, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (domain, category, confidence, source))
-            self.conn.commit()
-            logger.debug(f"Cached {domain} → {category}")
+            with self._lock:
+                cur = self.conn.cursor()
+                cur.execute("""
+                    INSERT OR REPLACE INTO website_cache 
+                    (domain, category, confidence, source, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (domain, category, confidence, source))
+                self.conn.commit()
+                cur.close()
+            logger.debug(f"Cached {domain} -> {category}")
         except Exception as e:
             logger.error(f"Error caching {domain}: {e}")
     
     def batch_set(self, items: Dict[str, Tuple[str, float, str]]):
         """
         Bulk insert multiple categorizations.
-        
-        Args:
-            items: Dict of {domain: (category, confidence, source)}
         """
         try:
             items_list = [
                 (domain, cat_conf[0], cat_conf[1], cat_conf[2])
                 for domain, cat_conf in items.items()
             ]
-            self.cursor.executemany("""
-                INSERT OR REPLACE INTO website_cache 
-                (domain, category, confidence, source, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """, items_list)
-            self.conn.commit()
+            with self._lock:
+                cur = self.conn.cursor()
+                cur.executemany("""
+                    INSERT OR REPLACE INTO website_cache 
+                    (domain, category, confidence, source, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, items_list)
+                self.conn.commit()
+                cur.close()
             logger.info(f"Batch cached {len(items)} websites")
         except Exception as e:
             logger.error(f"Error batch caching: {e}")
@@ -111,12 +116,15 @@ class WebsiteCacheDB:
         """Remove cache entries older than specified days."""
         try:
             cutoff_date = datetime.now() - timedelta(days=days)
-            self.cursor.execute(
-                "DELETE FROM website_cache WHERE updated_at < ? AND source = 'gemini'",
-                (cutoff_date,)
-            )
-            deleted = self.cursor.rowcount
-            self.conn.commit()
+            with self._lock:
+                cur = self.conn.cursor()
+                cur.execute(
+                    "DELETE FROM website_cache WHERE updated_at < ? AND source = 'gemini'",
+                    (cutoff_date,)
+                )
+                deleted = cur.rowcount
+                self.conn.commit()
+                cur.close()
             logger.info(f"Cleared {deleted} old cache entries")
         except Exception as e:
             logger.error(f"Error clearing old entries: {e}")
@@ -124,14 +132,15 @@ class WebsiteCacheDB:
     def get_stats(self) -> Dict:
         """Get cache statistics."""
         try:
-            self.cursor.execute("SELECT COUNT(*) FROM website_cache")
-            total = self.cursor.fetchone()[0]
-            
-            self.cursor.execute(
-                "SELECT source, COUNT(*) FROM website_cache GROUP BY source"
-            )
-            by_source = dict(self.cursor.fetchall())
-            
+            with self._lock:
+                cur = self.conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM website_cache")
+                total = cur.fetchone()[0]
+                cur.execute(
+                    "SELECT source, COUNT(*) FROM website_cache GROUP BY source"
+                )
+                by_source = dict(cur.fetchall())
+                cur.close()
             return {
                 "total_cached": total,
                 "by_source": by_source

@@ -23,19 +23,26 @@ class ChromeTabMonitor:
         self.debug_port = debug_port
         self.base_url = f"http://localhost:{debug_port}"
         self._available = None
+        self._available_checked_at = 0  # timestamp of last check
+        self._check_interval = 30  # re-check every 30 seconds
     
     def is_available(self) -> bool:
-        """Check if Chrome DevTools Protocol is available"""
-        if self._available is not None:
+        """Check if Chrome DevTools Protocol is available (with TTL cache)"""
+        import time
+        now = time.time()
+        
+        # Use cached value if within TTL
+        if self._available is not None and (now - self._available_checked_at) < self._check_interval:
             return self._available
         
         try:
-            response = requests.get(f"{self.base_url}/json/version", timeout=1)
+            response = requests.get(f"{self.base_url}/json/version", timeout=0.5)
             self._available = response.status_code == 200
-            return self._available
-        except:
+        except Exception:
             self._available = False
-            return False
+        
+        self._available_checked_at = now
+        return self._available
     
     def get_all_tabs(self) -> List[Dict]:
         """

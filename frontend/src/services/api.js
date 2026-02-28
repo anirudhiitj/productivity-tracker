@@ -2,7 +2,18 @@
  * API Service - Fetch calls to FastAPI backend
  */
 
-const API_BASE_URL = 'http://localhost:8000/api';
+// Get API base URL dynamically (re-evaluated on each call)
+// This ensures Electron's injected window.__BACKEND_URL__ is picked up
+// even if it's set after module load
+const getAPIBaseURL = () => {
+  if (typeof window !== 'undefined' && window.__BACKEND_URL__) {
+    return `${window.__BACKEND_URL__}/api`;
+  }
+  // Default fallback for dev mode
+  return '/api';
+};
+
+console.log('[API] Initial Base URL:', getAPIBaseURL());
 
 export const apiService = {
   /**
@@ -10,11 +21,16 @@ export const apiService = {
    */
   getMainProcesses: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/processes/main`);
-      if (!response.ok) throw new Error('Failed to fetch processes');
+      const base = getAPIBaseURL();
+      const response = await fetch(`${base}/processes/main`, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch processes`);
       return await response.json();
     } catch (error) {
-      console.error('Error fetching main processes:', error);
+      console.error('[API] Error fetching main processes:', error);
       throw error;
     }
   },
@@ -24,11 +40,16 @@ export const apiService = {
    */
   getAllProcesses: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/processes/all`);
-      if (!response.ok) throw new Error('Failed to fetch all processes');
+      const base = getAPIBaseURL();
+      const response = await fetch(`${base}/processes/all`, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch all processes`);
       return await response.json();
     } catch (error) {
-      console.error('Error fetching all processes:', error);
+      console.error('[API] Error fetching all processes:', error);
       throw error;
     }
   },
@@ -38,11 +59,16 @@ export const apiService = {
    */
   getProcessStats: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/processes/stats`);
-      if (!response.ok) throw new Error('Failed to fetch stats');
+      const base = getAPIBaseURL();
+      const response = await fetch(`${base}/processes/stats`, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch stats`);
       return await response.json();
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('[API] Error fetching stats:', error);
       throw error;
     }
   },
@@ -52,11 +78,16 @@ export const apiService = {
    */
   getProcessesByCategory: async (category) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/processes/category/${category}`);
+      const base = getAPIBaseURL();
+      const response = await fetch(`${base}/processes/category/${category}`, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       if (!response.ok) throw new Error(`Failed to fetch ${category} processes`);
       return await response.json();
     } catch (error) {
-      console.error(`Error fetching ${category} processes:`, error);
+      console.error(`[API] Error fetching ${category} processes:`, error);
       throw error;
     }
   },
@@ -66,10 +97,12 @@ export const apiService = {
    */
   healthCheck: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`);
+      const base = getAPIBaseURL();
+      const healthUrl = base.replace('/api', '') + '/api/health';
+      const response = await fetch(healthUrl);
       return await response.json();
     } catch (error) {
-      console.error('Health check failed:', error);
+      console.error('[API] Health check failed:', error);
       throw error;
     }
   }

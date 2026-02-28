@@ -1,5 +1,5 @@
 {
-  "name": "productivity-tracker-ui",
+  "name": "focusrank",
   "version": "1.0.0",
   "type": "module",
   "main": "public/main.js",
@@ -10,9 +10,7 @@
     "preview": "vite preview",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-build": "npm run build && electron-builder",
-    "electron-build-win": "npm run build && electron-builder -w",
-    "electron-build-all": "npm run build && electron-builder -wml",
-    "dist": "npm run electron-build-win"
+    "dist": "npm run build && electron-builder -w --publish never"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -22,15 +20,18 @@
     "@vitejs/plugin-react": "^4.2.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^40.6.1",
-    "electron-builder": "^26.8.1",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
     "terser": "^5.46.0",
     "vite": "^5.0.0",
     "wait-on": "^9.0.4"
   },
-    "build": {
+  "build": {
     "appId": "com.focusrank.tracker",
     "productName": "FocusRank",
+    "copyright": "Copyright 2026",
+    "compression": "maximum",
+    "asar": true,
     "directories": {
       "buildResources": "public",
       "output": "dist_electron"
@@ -43,22 +44,40 @@
       },
       "public/main.js",
       "public/preload.js",
-      "public/icon.png",
+      "public/icon.png"
+    ],
+    "extraResources": [
       {
-        "from": "node_modules",
-        "to": "node_modules"
+        "from": "../dist/tracker-backend",
+        "to": "python-backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../data",
+        "to": "data",
+        "filter": ["**/*"]
       }
     ],
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": ["x64"]
         }
       ],
       "icon": "public/icon.png",
       "signAndEditExecutable": false,
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FocusRank",
+      "runAfterFinish": true
     }
   }
 }
