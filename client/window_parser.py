@@ -24,6 +24,14 @@ class WindowTitleParser:
         "brave.exe",
         "iexplore.exe",
     ]
+    
+    # Excluded processes that are browser-related but not actual browsers
+    EXCLUDED_BROWSER_PROCESSES = [
+        "msedgewebview2.exe",  # Edge WebView control
+        "chrome_proxy.exe",    # Chrome proxy
+        "chromedriver.exe",    # Chrome automation
+        "geckodriver.exe",     # Firefox automation
+    ]
 
     @staticmethod
     def is_browser_process(process_name: str) -> bool:
@@ -78,9 +86,15 @@ class WindowTitleParser:
         """
         if not process_name:
             return False
-        return any(
-            browser in process_name.lower() for browser in WindowTitleParser.BROWSER_PROCESSES
-        )
+        
+        proc_lower = process_name.lower()
+        
+        # Exclude known non-browser processes first
+        if proc_lower in WindowTitleParser.EXCLUDED_BROWSER_PROCESSES:
+            return False
+        
+        # Check if it's a known browser
+        return proc_lower in WindowTitleParser.BROWSER_PROCESSES
 
     @staticmethod
     def is_junk_window(title: Optional[str]) -> bool:

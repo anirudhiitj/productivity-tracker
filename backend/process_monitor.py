@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.category_engine import CategoryEngine
 from client.window_parser import WindowTitleParser
 from backend.website_categorizer import get_website_categorizer
+from backend.chrome_tab_monitor import get_chrome_tab_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -117,14 +118,80 @@ class ProcessMonitor:
         # Enrich with category and window title
         main_processes = self._enrich_processes(main_processes)
         
+        # Try to get ALL Chrome tabs via DevTools Protocol (includes background tabs)
+        chrome_monitor = get_chrome_tab_monitor()
+        chrome_devtools_available = chrome_monitor.is_available()
+        
+        if chrome_devtools_available:
+            logger.info("Chrome DevTools Protocol available - getting ALL tabs")
+            chrome_tabs_from_devtools = chrome_monitor.get_all_tabs()
+        else:
+            logger.debug("Chrome DevTools Protocol not available - using window enumeration")
+            chrome_tabs_from_devtools = []
+        
         # Expand browser processes to show each tab/window as separate entry
         expanded_processes = []
         browser_windows_seen = set()
         
-        # Get all browser windows globally
+        # Get all browser windows globally (for non-Chrome browsers and fallback)
         all_windows = WindowTitleParser.get_all_browser_windows()
         
+        # If Chrome DevTools is available, use it to create Chrome tab entries
+        if chrome_devtools_available and chrome_tabs_from_devtools:
+            # Find a Chrome process to use as template for resource info
+            chrome_proc_template = None
+            for proc in main_processes:
+                if 'chrome.exe' == proc['name'].lower():
+                    chrome_proc_template = proc
+                    break
+            
+            # Create entry for each Chrome tab from DevTools
+            for tab in chrome_tabs_from_devtools:
+                tab_title = tab.get('title', 'Untitled')
+                tab_url = tab.get('url', '')
+                tab_domain = tab.get('domain', 'unknown')
+                
+                # Skip if already seen
+                if tab_title in browser_windows_seen:
+                    continue
+                browser_windows_seen.add(tab_title)
+                
+                # Create synthetic process entry
+                if chrome_proc_template:
+                    tab_proc = chrome_proc_template.copy()
+                else:
+                    # No Chrome process found, create minimal entry
+                    tab_proc = {
+                        'pid': 0,
+                        'name': 'chrome.exe',
+                        'memory_mb': 0,
+                        'cpu_percent': 0,
+                        'memory_percent': 0,
+                        'username': 'User',
+                        'create_time': datetime.now().timestamp(),
+                    }
+                
+                tab_proc['window_title'] = tab_title
+                tab_proc['domain'] = tab_domain
+                tab_proc['url'] = tab_url
+                
+                # Categorize the tab
+                categorizer = get_website_categorizer()
+                category_result = categorizer.categorize(tab_domain, tab_title, tab_url)
+                tab_proc['category'] = category_result.get('category', 'Neutral')
+                tab_proc['categorization_source'] = 'devtools'
+                tab_proc['domain_confidence'] = 1.0
+                
+                expanded_processes.append(tab_proc)
+        
+        # Handle browser processes (non-Chrome or when DevTools not available)
         for proc in main_processes:
+            is_chrome = 'chrome.exe' == proc['name'].lower()
+            
+            # Skip Chrome if we already processed it via DevTools
+            if is_chrome and chrome_devtools_available and chrome_tabs_from_devtools:
+                continue
+            
             if WindowTitleParser.is_browser_process(proc['name']):
                 # Find all windows for this browser process
                 proc_windows = [
@@ -132,8 +199,8 @@ class ProcessMonitor:
                     if pid == proc['pid'] and not WindowTitleParser.is_junk_window(title)
                 ]
                 
-                if len(proc_windows) > 1:
-                    # Multiple windows - create entry for each
+                if len(proc_windows) > 0:
+                    # Has windows - create entry for each
                     for window_title in proc_windows:
                         if window_title not in browser_windows_seen:
                             browser_windows_seen.add(window_title)
@@ -143,9 +210,7 @@ class ProcessMonitor:
                             # Extract domain and categorize
                             self._enrich_window(tab_proc, window_title)
                             expanded_processes.append(tab_proc)
-                else:
-                    # Single window or none - use original
-                    expanded_processes.append(proc)
+                # Skip browser processes with no windows (background processes)
             else:
                 # Non-browser process
                 expanded_processes.append(proc)
@@ -155,6 +220,15 @@ class ProcessMonitor:
         for pid, window_title in all_windows:
             if (not WindowTitleParser.is_junk_window(window_title) and 
                 window_title not in browser_windows_seen):
+                
+                # Check if this is actually a browser process
+                try:
+                    p = psutil.Process(pid)
+                    if not WindowTitleParser.is_browser_process(p.name()):
+                        continue  # Skip non-browser processes
+                except:
+                    continue  # Skip if can't access process
+                
                 browser_windows_seen.add(window_title)
                 
                 # Try to find process or create synthetic entry
@@ -186,10 +260,22 @@ class ProcessMonitor:
                 self._enrich_window(proc, window_title)
                 expanded_processes.append(proc)
 
+        # Final filter: Remove any browser processes without window titles
+        # (these are background processes like Edge WebView, Chrome GPU process, etc.)
+        filtered_processes = []
+        for proc in expanded_processes:
+            if WindowTitleParser.is_browser_process(proc['name']):
+                # Only include browser processes with window titles
+                if proc.get('window_title') and proc.get('window_title') != 'N/A':
+                    filtered_processes.append(proc)
+            else:
+                # Always include non-browser processes
+                filtered_processes.append(proc)
+        
         # Sort by memory usage (descending)
-        expanded_processes.sort(key=lambda x: x['memory_mb'], reverse=True)
+        filtered_processes.sort(key=lambda x: x['memory_mb'], reverse=True)
 
-        return expanded_processes
+        return filtered_processes
 
     def _enrich_processes(self, processes: List[Dict]) -> List[Dict]:
         """
