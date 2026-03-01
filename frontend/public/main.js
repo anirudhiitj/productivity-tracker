@@ -92,10 +92,11 @@ async function startBackend() {
     } else {
       // Production: find the bundled backend exe
       const resourcesPath = process.resourcesPath;
+      const exeName = process.platform === 'win32' ? 'tracker-backend.exe' : 'tracker-backend';
       const possiblePaths = [
-        path.join(resourcesPath, 'python-backend', 'tracker-backend.exe'),
-        path.join(resourcesPath, 'tracker-backend', 'tracker-backend.exe'),
-        path.join(path.dirname(process.execPath), 'resources', 'python-backend', 'tracker-backend.exe')
+        path.join(resourcesPath, 'python-backend', exeName),
+        path.join(resourcesPath, 'tracker-backend', exeName),
+        path.join(path.dirname(process.execPath), 'resources', 'python-backend', exeName)
       ];
 
       let exePath = null;

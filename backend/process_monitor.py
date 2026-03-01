@@ -12,6 +12,8 @@ import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+_PLATFORM = sys.platform  # 'win32', 'linux', 'darwin'
+
 # Add parent directory to path to import from client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -33,15 +35,32 @@ class ProcessMonitor:
     MIN_MEMORY_MB = 100  # 100 MB minimum
     MIN_CPU_PERCENT = 1.0  # 1% CPU minimum
 
-    # System processes to exclude
-    EXCLUDED_PROCESSES = {
-        "system", "svchost.exe", "lsass.exe", "csrss.exe",
-        "wininit.exe", "services.exe", "lsm.exe", "dwm.exe",
-        "searchindexer.exe", "windows.indexing.service",
-        "ntoskrnl.exe", "idle", "registry", "smss.exe",
-        "conhost.exe", "dllhost.exe", "rundll32.exe",
-        "taskhostw.exe", "windowsupdate.exe"
-    }
+    # System processes to exclude (cross-platform)
+    if _PLATFORM == 'win32':
+        EXCLUDED_PROCESSES = {
+            "system", "svchost.exe", "lsass.exe", "csrss.exe",
+            "wininit.exe", "services.exe", "lsm.exe", "dwm.exe",
+            "searchindexer.exe", "windows.indexing.service",
+            "ntoskrnl.exe", "idle", "registry", "smss.exe",
+            "conhost.exe", "dllhost.exe", "rundll32.exe",
+            "taskhostw.exe", "windowsupdate.exe"
+        }
+    elif _PLATFORM == 'darwin':
+        EXCLUDED_PROCESSES = {
+            "kernel_task", "launchd", "syslogd", "mds", "mds_stores",
+            "mdworker", "opendirectoryd", "notifyd", "WindowServer",
+            "loginwindow", "distnoted", "cfprefsd", "lsd",
+            "trustd", "securityd", "coreservicesd", "hidd",
+            "coreaudiod", "powerd", "timed", "fseventsd",
+        }
+    else:  # linux
+        EXCLUDED_PROCESSES = {
+            "systemd", "kthreadd", "ksoftirqd", "kworker",
+            "rcu_sched", "migration", "watchdog", "kswapd",
+            "jbd2", "ksmd", "khugepaged", "kcompactd",
+            "irq", "dbus-daemon", "polkitd", "accounts-daemon",
+            "networkmanager", "gdm3", "gnome-shell",
+        }
 
     def __init__(self):
         """Initialize process monitor."""
@@ -142,11 +161,12 @@ class ProcessMonitor:
         all_windows = WindowTitleParser.get_all_browser_windows()
         
         # If Chrome DevTools is available, use it to create Chrome tab entries
+        chrome_name = 'chrome.exe' if _PLATFORM == 'win32' else ('google chrome' if _PLATFORM == 'darwin' else 'chrome')
         if chrome_devtools_available and chrome_tabs_from_devtools:
             # Find a Chrome process to use as template for resource info
             chrome_proc_template = None
             for proc in main_processes:
-                if 'chrome.exe' == proc['name'].lower():
+                if proc['name'].lower() == chrome_name:
                     chrome_proc_template = proc
                     break
             
@@ -168,7 +188,7 @@ class ProcessMonitor:
                     # No Chrome process found, create minimal entry
                     tab_proc = {
                         'pid': 0,
-                        'name': 'chrome.exe',
+                        'name': chrome_name,
                         'memory_mb': 0,
                         'cpu_percent': 0,
                         'memory_percent': 0,
@@ -191,7 +211,7 @@ class ProcessMonitor:
         
         # Handle browser processes (non-Chrome or when DevTools not available)
         for proc in main_processes:
-            is_chrome = 'chrome.exe' == proc['name'].lower()
+            is_chrome = proc['name'].lower() in ('chrome.exe', 'chrome', 'chromium', 'chromium-browser', 'google chrome')
             
             # Skip Chrome if we already processed it via DevTools
             if is_chrome and chrome_devtools_available and chrome_tabs_from_devtools:
@@ -253,7 +273,7 @@ class ProcessMonitor:
                     # Process may have died, use minimal entry
                     proc = {
                         'pid': pid,
-                        'name': 'chrome.exe',
+                        'name': 'chrome' if _PLATFORM != 'win32' else 'chrome.exe',
                         'memory_mb': 0,
                         'cpu_percent': 0,
                         'memory_percent': 0,

@@ -1,7 +1,10 @@
-"""Build the Python backend as a PyInstaller onedir bundle for Electron."""
+"""Build the Python backend as a PyInstaller onedir bundle for Electron.
+Supports Windows, Linux, and macOS.
+"""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -15,7 +18,15 @@ WORK_DIR = BUILD_DIR / "pyi"
 SPEC_DIR = BUILD_DIR / "spec"
 
 BACKEND_OUTPUT_DIR = DIST_DIR / "tracker-backend"
-BACKEND_EXE = BACKEND_OUTPUT_DIR / "tracker-backend.exe"
+
+# Platform-aware executable name
+if sys.platform == 'win32':
+    BACKEND_EXE = BACKEND_OUTPUT_DIR / "tracker-backend.exe"
+else:
+    BACKEND_EXE = BACKEND_OUTPUT_DIR / "tracker-backend"
+
+# PyInstaller uses os.pathsep as the add-data separator (';' Windows, ':' Linux/macOS)
+PATHSEP = os.pathsep
 
 
 def run(cmd: list[str]) -> None:
@@ -38,21 +49,16 @@ def clean_dirs() -> None:
 
 def build_backend() -> None:
     add_data = [
-        f"{ROOT_DIR / 'backend'};backend",
-        f"{ROOT_DIR / 'client'};client",
+        f"{ROOT_DIR / 'backend'}{PATHSEP}backend",
+        f"{ROOT_DIR / 'client'}{PATHSEP}client",
     ]
 
     # Only include data dir if it exists and has content
     data_dir = ROOT_DIR / "data"
     if data_dir.exists() and any(data_dir.iterdir()):
-        add_data.append(f"{data_dir};data")
+        add_data.append(f"{data_dir}{PATHSEP}data")
 
     hidden_imports = [
-        # Win32 APIs for window enumeration
-        "win32api",
-        "win32con",
-        "win32process",
-        "win32gui",
         # FastAPI / Uvicorn
         "uvicorn",
         "uvicorn.logging",
@@ -73,7 +79,6 @@ def build_backend() -> None:
         "psutil",
         # ctypes for window enumeration
         "ctypes",
-        "ctypes.wintypes",
         # sqlite3 for website cache
         "sqlite3",
         # Encoding support
@@ -81,8 +86,18 @@ def build_backend() -> None:
         "encodings.utf_8",
         "encodings.ascii",
         "encodings.latin_1",
-        "encodings.cp1252",
     ]
+
+    # Windows-only hidden imports
+    if sys.platform == 'win32':
+        hidden_imports.extend([
+            "win32api",
+            "win32con",
+            "win32process",
+            "win32gui",
+            "ctypes.wintypes",
+            "encodings.cp1252",
+        ])
 
     # Optional: Google Generative AI
     try:
@@ -114,7 +129,10 @@ def build_backend() -> None:
     for item in hidden_imports:
         cmd.extend(["--hidden-import", item])
 
-    cmd.extend(["--collect-all", "pywin32"])
+    # Windows-only: collect pywin32
+    if sys.platform == 'win32':
+        cmd.extend(["--collect-all", "pywin32"])
+
     # Try to collect google-generativeai if it's installed
     try:
         import google.generativeai  # noqa: F401
@@ -132,11 +150,15 @@ def verify() -> None:
         raise FileNotFoundError(f"Backend executable not found: {BACKEND_EXE}")
 
     size_mb = BACKEND_EXE.stat().st_size / (1024 * 1024)
+    exe_name = BACKEND_EXE.name
     print("=" * 70)
     print("Backend build complete")
     print(f"Executable: {BACKEND_EXE}")
     print(f"Size: {size_mb:.1f} MB")
-    print("Test: dist\\tracker-backend\\tracker-backend.exe")
+    if sys.platform == 'win32':
+        print(f"Test: dist\\tracker-backend\\{exe_name}")
+    else:
+        print(f"Test: dist/tracker-backend/{exe_name}")
     print("=" * 70)
 
 

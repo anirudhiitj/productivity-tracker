@@ -70,6 +70,30 @@
       "verifyUpdateCodeSignature": false,
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.png",
+      "category": "Utility",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
     "nsis": {
       "oneClick": true,
       "perMachine": false,

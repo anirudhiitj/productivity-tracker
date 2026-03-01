@@ -113,8 +113,14 @@ class ChromeTabMonitor:
     
     @staticmethod
     def get_chrome_launch_command() -> str:
-        """Get command to launch Chrome with DevTools enabled"""
-        return 'chrome.exe --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\\Google\\Chrome\\User Data"'
+        """Get command to launch Chrome with DevTools enabled (cross-platform)"""
+        import sys as _sys
+        if _sys.platform == 'win32':
+            return 'chrome.exe --remote-debugging-port=9222 --user-data-dir="%LOCALAPPDATA%\\Google\\Chrome\\User Data"'
+        elif _sys.platform == 'darwin':
+            return '/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222 --user-data-dir="$HOME/Library/Application Support/Google/Chrome"'
+        else:
+            return 'google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/google-chrome"'
 
 
 # Global instance

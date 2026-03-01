@@ -1,73 +1,126 @@
-name: Build and Release Productivity Tracker
+name: Build FocusRank (Windows + Linux + macOS)
 
 on:
   push:
     tags:
       - 'v*'  # Trigger on version tags like v1.0.0
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            electron_flag: -w
+            artifact_glob: "frontend/dist_electron/FocusRank-Setup-*.exe"
+          - os: ubuntu-latest
+            platform: linux
+            electron_flag: -l
+            artifact_glob: "frontend/dist_electron/FocusRank-Setup-*.AppImage"
+          - os: macos-latest
+            platform: macos
+            electron_flag: -m
+            artifact_glob: "frontend/dist_electron/FocusRank-Setup-*.dmg"
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      
+
+      # Linux-only: install system libs needed by Electron and window tracking
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxext-dev libxss-dev \
+            libgtk-3-dev libnss3 libatk-bridge2.0-0 libdrm2 libgbm1 \
+            xdotool wmctrl
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-      
-      - name: Install Node.js dependencies
-        run: npm install
-      
+
       - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm install
-      
-      - name: Build frontend
-        run: |
-          cd frontend
-          npm run build
-      
-      - name: Bundle Python backend
+        working-directory: frontend
+        run: npm install
+
+      - name: Build frontend (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Python backend (PyInstaller)
         run: python build_backend.py
-      
-      - name: Build Electron app
-        run: npm run build:electron
+
+      - name: Build Electron installer
+        working-directory: frontend
+        run: npx electron-builder ${{ matrix.electron_flag }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: List build output
+        shell: bash
+        run: ls -la frontend/dist_electron/ || echo "No dist_electron folder"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: productivity-tracker-installers
-          path: |
-            dist/*.exe
-            dist/*Setup*.exe
-      
-      - name: Create GitHub Release (if tagged)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+          name: FocusRank-${{ matrix.platform }}
+          path: ${{ matrix.artifact_glob }}
+
+  # ─── Create one GitHub Release with all 3 files ───
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display downloaded files
+        run: find artifacts -type f | head -50
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*Setup*.exe
-            dist/*Portable*.exe
+            artifacts/FocusRank-windows/*
+            artifacts/FocusRank-linux/*
+            artifacts/FocusRank-macos/*
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ## Downloads
+
+            | Platform | File | How to use |
+            |----------|------|-----------|
+            | **Windows** | `FocusRank-Setup-1.0.0.exe` | Double-click to install |
+            | **Linux** | `FocusRank-Setup-1.0.0.AppImage` | `chmod +x` then run |
+            | **macOS** | `FocusRank-Setup-1.0.0.dmg` | Open, drag to Applications |
+
+            No Python or Node.js needed — everything is bundled.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

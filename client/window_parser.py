@@ -5,9 +5,16 @@ Intelligently focuses on the active/foreground window and extracts meaningful ta
 
 import logging
 import re
+import sys
+import subprocess
+import shutil
 from typing import Optional, Tuple, Dict, List
-import ctypes
-from ctypes import wintypes
+
+_PLATFORM = sys.platform  # 'win32', 'linux', 'darwin'
+
+if _PLATFORM == 'win32':
+    import ctypes
+    from ctypes import wintypes
 
 logger = logging.getLogger(__name__)
 
@@ -15,23 +22,32 @@ logger = logging.getLogger(__name__)
 class WindowTitleParser:
     """Parses window titles and focuses on the active/foreground window."""
 
-    # Browser process names
-    BROWSER_PROCESSES = [
-        "chrome.exe",
-        "firefox.exe",
-        "msedge.exe",
-        "opera.exe",
-        "brave.exe",
-        "iexplore.exe",
-    ]
-    
-    # Excluded processes that are browser-related but not actual browsers
-    EXCLUDED_BROWSER_PROCESSES = [
-        "msedgewebview2.exe",  # Edge WebView control
-        "chrome_proxy.exe",    # Chrome proxy
-        "chromedriver.exe",    # Chrome automation
-        "geckodriver.exe",     # Firefox automation
-    ]
+    # Browser process names (cross-platform)
+    if _PLATFORM == 'win32':
+        BROWSER_PROCESSES = [
+            "chrome.exe", "firefox.exe", "msedge.exe",
+            "opera.exe", "brave.exe", "iexplore.exe",
+        ]
+        EXCLUDED_BROWSER_PROCESSES = [
+            "msedgewebview2.exe", "chrome_proxy.exe",
+            "chromedriver.exe", "geckodriver.exe",
+        ]
+    elif _PLATFORM == 'darwin':
+        BROWSER_PROCESSES = [
+            "google chrome", "firefox", "microsoft edge",
+            "opera", "brave browser", "safari",
+        ]
+        EXCLUDED_BROWSER_PROCESSES = [
+            "google chrome helper", "firefox content process",
+        ]
+    else:  # linux
+        BROWSER_PROCESSES = [
+            "chrome", "chromium", "chromium-browser", "firefox",
+            "microsoft-edge", "opera", "brave-browser",
+        ]
+        EXCLUDED_BROWSER_PROCESSES = [
+            "chromedriver", "geckodriver",
+        ]
 
     @staticmethod
     def is_browser_process(process_name: str) -> bool:
@@ -136,28 +152,56 @@ class WindowTitleParser:
             Tuple of (window_title, pid) or None if unable to get
         """
         try:
-            # Get foreground window handle
-            hwnd = ctypes.windll.user32.GetForegroundWindow()
-            if not hwnd:
-                return None
-            
-            # Get window title
-            length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
-            if length == 0:
-                return None
-            
-            buffer = ctypes.create_unicode_buffer(length + 1)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
-            title = buffer.value
-            
-            # Get process ID for this window
-            pid = wintypes.DWORD()
-            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            
-            if WindowTitleParser.is_junk_window(title):
-                return None
-            
-            return (title, pid.value)
+            if _PLATFORM == 'win32':
+                hwnd = ctypes.windll.user32.GetForegroundWindow()
+                if not hwnd:
+                    return None
+                length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                if length == 0:
+                    return None
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
+                title = buffer.value
+                pid = wintypes.DWORD()
+                ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if WindowTitleParser.is_junk_window(title):
+                    return None
+                return (title, pid.value)
+
+            elif _PLATFORM == 'linux':
+                if not shutil.which('xdotool'):
+                    return None
+                wid = subprocess.check_output(
+                    ['xdotool', 'getactivewindow'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                title = subprocess.check_output(
+                    ['xdotool', 'getactivewindow', 'getwindowname'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                pid_str = subprocess.check_output(
+                    ['xdotool', 'getwindowpid', wid], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                pid = int(pid_str) if pid_str else 0
+                if WindowTitleParser.is_junk_window(title):
+                    return None
+                return (title, pid)
+
+            elif _PLATFORM == 'darwin':
+                script_pid = 'tell application "System Events" to unix id of first process whose frontmost is true'
+                pid_result = subprocess.check_output(
+                    ['osascript', '-e', script_pid], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                script_title = (
+                    'tell application "System Events" to get the title of the '
+                    'front window of (first process whose frontmost is true)'
+                )
+                title = subprocess.check_output(
+                    ['osascript', '-e', script_title], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                pid = int(pid_result) if pid_result else 0
+                if WindowTitleParser.is_junk_window(title):
+                    return None
+                return (title, pid)
+
         except Exception as e:
             logger.debug(f"Error getting foreground window: {e}")
             return None
@@ -171,43 +215,103 @@ class WindowTitleParser:
             List of (pid, window_title) tuples for browser processes
         """
         windows = []
-        
-        def enum_windows_callback(hwnd, lParam):
+
+        if _PLATFORM == 'win32':
+            def enum_windows_callback(hwnd, lParam):
+                try:
+                    if not ctypes.windll.user32.IsWindowVisible(hwnd):
+                        return True
+                    length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                    if length == 0:
+                        return True
+                    buffer = ctypes.create_unicode_buffer(length + 1)
+                    ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
+                    title = buffer.value
+                    if WindowTitleParser.is_junk_window(title):
+                        return True
+                    pid = wintypes.DWORD()
+                    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    windows.append((pid.value, title))
+                    return True
+                except:
+                    return True
             try:
-                # Check if window is visible
-                if not ctypes.windll.user32.IsWindowVisible(hwnd):
-                    return True
-                
-                # Get window title
-                length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
-                if length == 0:
-                    return True
-                
-                buffer = ctypes.create_unicode_buffer(length + 1)
-                ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
-                title = buffer.value
-                
-                # Skip junk windows
-                if WindowTitleParser.is_junk_window(title):
-                    return True
-                
-                # Get process ID
-                pid = wintypes.DWORD()
-                ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                
-                windows.append((pid.value, title))
-                return True
-            except:
-                return True
-        
-        try:
-            # Use EnumWindows to iterate all windows
-            callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-            enum_func = callback(enum_windows_callback)
-            ctypes.windll.user32.EnumWindows(enum_func, 0)
-        except Exception as e:
-            logger.debug(f"Error enumerating windows: {e}")
-        
+                callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+                enum_func = callback(enum_windows_callback)
+                ctypes.windll.user32.EnumWindows(enum_func, 0)
+            except Exception as e:
+                logger.debug(f"Error enumerating windows: {e}")
+
+        elif _PLATFORM == 'linux':
+            # Use wmctrl to list all windows
+            try:
+                if shutil.which('wmctrl'):
+                    output = subprocess.check_output(
+                        ['wmctrl', '-lp'], stderr=subprocess.DEVNULL
+                    ).decode(errors='replace')
+                    for line in output.strip().splitlines():
+                        parts = line.split(None, 4)
+                        if len(parts) >= 5:
+                            pid = int(parts[2])
+                            title = parts[4]
+                            if not WindowTitleParser.is_junk_window(title):
+                                windows.append((pid, title))
+                elif shutil.which('xdotool'):
+                    wids = subprocess.check_output(
+                        ['xdotool', 'search', '--onlyvisible', '--name', ''],
+                        stderr=subprocess.DEVNULL
+                    ).decode().strip().splitlines()
+                    for wid in wids:
+                        try:
+                            title = subprocess.check_output(
+                                ['xdotool', 'getwindowname', wid], stderr=subprocess.DEVNULL
+                            ).decode().strip()
+                            pid_str = subprocess.check_output(
+                                ['xdotool', 'getwindowpid', wid], stderr=subprocess.DEVNULL
+                            ).decode().strip()
+                            pid = int(pid_str) if pid_str else 0
+                            if not WindowTitleParser.is_junk_window(title):
+                                windows.append((pid, title))
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.debug(f"Error enumerating windows on Linux: {e}")
+
+        elif _PLATFORM == 'darwin':
+            try:
+                script = '''
+                    set windowList to {}
+                    tell application "System Events"
+                        set allProcs to every process whose visible is true
+                        repeat with proc in allProcs
+                            try
+                                set procName to name of proc
+                                set procID to unix id of proc
+                                set allWindows to every window of proc
+                                repeat with w in allWindows
+                                    try
+                                        set wTitle to name of w
+                                        set end of windowList to (procID as text) & "|||" & wTitle
+                                    end try
+                                end repeat
+                            end try
+                        end repeat
+                    end tell
+                    set AppleScript's text item delimiters to "\n"
+                    return windowList as text
+                '''
+                result = subprocess.check_output(
+                    ['osascript', '-e', script], stderr=subprocess.DEVNULL
+                ).decode(errors='replace').strip()
+                for line in result.splitlines():
+                    if '|||' in line:
+                        pid_str, title = line.split('|||', 1)
+                        pid = int(pid_str.strip()) if pid_str.strip().isdigit() else 0
+                        if not WindowTitleParser.is_junk_window(title):
+                            windows.append((pid, title))
+            except Exception as e:
+                logger.debug(f"Error enumerating windows on macOS: {e}")
+
         return windows
 
     @staticmethod

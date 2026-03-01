@@ -1,0 +1,203 @@
+================================================================================
+  FocusRank — How to Run (Desktop Application)
+================================================================================
+
+  One single file per platform — just download and run:
+    Windows : FocusRank-Setup-1.0.0.exe
+    Linux   : FocusRank-Setup-1.0.0.AppImage
+    macOS   : FocusRank-Setup-1.0.0.dmg
+
+
+================================================================================
+  EASIEST WAY: Download from GitHub Releases (no building needed)
+================================================================================
+
+  Go to: https://github.com/<YOUR-USERNAME>/productivity-tracker/releases
+
+  Pick your platform, download the one file, run it. Done.
+  No Python, Node.js, or any other software needed.
+
+
+================================================================================
+  HOW TO CREATE ALL 3 FILES (for the developer, from Windows)
+================================================================================
+
+  You're on Windows so you can only build the .exe locally.
+  To also create the Linux and macOS files, use GitHub Actions:
+
+  1. Push your code to GitHub
+
+       git add -A
+       git commit -m "release v1.0.0"
+       git push origin main
+
+  2. Tag a release to trigger automatic builds for ALL platforms
+
+       git tag v1.0.0
+       git push origin v1.0.0
+
+  3. GitHub Actions will automatically build on:
+       - Windows runner  → produces FocusRank-Setup-1.0.0.exe
+       - Linux runner    → produces FocusRank-Setup-1.0.0.AppImage
+       - macOS runner    → produces FocusRank-Setup-1.0.0.dmg
+
+  4. All 3 files appear at:
+       https://github.com/<YOUR-USERNAME>/productivity-tracker/releases
+
+  OR: Trigger manually from GitHub → Actions tab → "Build FocusRank" → Run workflow
+
+  Put those 3 download links on your website. That's it.
+
+
+================================================================================
+  BUILDING LOCALLY (only needed if you want to build on your own machine)
+================================================================================
+
+  Prerequisites (for building only — end users need nothing):
+    - Python 3.10+
+    - Node.js 18+
+    - npm
+    - Git
+
+
+================================================================================
+  WINDOWS
+================================================================================
+
+1. Initialize Submodules
+
+   git submodule update --init --recursive
+
+2. Install Python Dependencies
+
+   pip install -r requirements.txt
+
+3. Build the Installer
+
+   cd productivity-tracker
+   python BUILD_INSTALLER.py
+
+4. Run the App
+
+   Output:
+     productivity-tracker/frontend/dist_electron/FocusRank-Setup-1.0.0.exe
+
+   Double-click FocusRank-Setup-1.0.0.exe — installs and launches.
+   Share this single .exe with anyone on Windows.
+
+
+================================================================================
+  LINUX
+================================================================================
+
+1. Install System Dependencies
+
+   # Ubuntu / Debian
+   sudo apt update
+   sudo apt install -y python3 python3-pip python3-venv nodejs npm \
+       libx11-dev libxext-dev libxss-dev libgtk-3-dev libnss3 \
+       libatk-bridge2.0-0 libdrm2 libgbm1 xdotool wmctrl
+
+   # Fedora
+   sudo dnf install -y python3 python3-pip nodejs npm \
+       gtk3-devel nss libdrm mesa-libgbm xdotool wmctrl
+
+   # Arch
+   sudo pacman -S python python-pip nodejs npm \
+       gtk3 nss libdrm xdotool wmctrl
+
+2. Initialize Submodules
+
+   git submodule update --init --recursive
+
+3. Install Python Dependencies
+
+   pip install -r requirements.txt
+
+4. Build the Installer
+
+   cd productivity-tracker
+   python3 BUILD_INSTALLER.py
+
+5. Run the App
+
+   Output:
+     productivity-tracker/frontend/dist_electron/FocusRank-Setup-1.0.0.AppImage
+
+   chmod +x frontend/dist_electron/FocusRank-Setup-1.0.0.AppImage
+   ./frontend/dist_electron/FocusRank-Setup-1.0.0.AppImage
+
+   Share this single .AppImage with anyone on Linux.
+   No installation needed — it just runs.
+
+
+================================================================================
+  macOS
+================================================================================
+
+1. Install System Dependencies
+
+   # Install Homebrew (if not already installed)
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+   # Install Python and Node.js
+   brew install python node
+
+2. Initialize Submodules
+
+   git submodule update --init --recursive
+
+3. Install Python Dependencies
+
+   pip3 install -r requirements.txt
+
+4. Build the Installer
+
+   cd productivity-tracker
+   python3 BUILD_INSTALLER.py
+
+5. Run the App
+
+   Output:
+     productivity-tracker/frontend/dist_electron/FocusRank-Setup-1.0.0.dmg
+
+   Double-click the .dmg, drag FocusRank to Applications, launch.
+   Share this single .dmg with anyone on macOS.
+
+   NOTE: On first launch macOS may block the app. Go to:
+     System Settings > Privacy & Security > Open Anyway
+
+
+================================================================================
+  SHARING — Just Send the File
+================================================================================
+
+  After building, grab the single file from:
+    frontend/dist_electron/
+
+  Windows:  Send FocusRank-Setup-1.0.0.exe     → recipient double-clicks it
+  Linux:    Send FocusRank-Setup-1.0.0.AppImage → recipient runs: chmod +x then ./
+  macOS:    Send FocusRank-Setup-1.0.0.dmg      → recipient opens and drags to Apps
+
+  The recipient does NOT need Python, Node.js, or anything else.
+  Everything is bundled inside that one file.
+
+
+================================================================================
+  NOTES
+================================================================================
+
+  - The build script (BUILD_INSTALLER.py) auto-detects your OS and produces
+    the correct single-file installer. Just run "python BUILD_INSTALLER.py".
+
+  - End users don't need Python, Node.js, or anything else installed —
+    everything is bundled inside the single file.
+
+  - For Linux, xdotool and wmctrl are recommended for full window tracking.
+    The app runs without them but window detection will be limited.
+
+  - For macOS, grant Accessibility permissions to FocusRank in
+    System Settings > Privacy & Security > Accessibility for full
+    window tracking support.
+
+================================================================================

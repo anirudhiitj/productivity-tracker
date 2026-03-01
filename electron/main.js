@@ -23,7 +23,8 @@ let backendLogFile = null;
 
 // Determine paths for production vs development
 const RESOURCES_PATH = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-const BACKEND_EXE_PATH = path.join(RESOURCES_PATH, 'python-backend', 'tracker-backend.exe');
+const BACKEND_EXE_NAME = process.platform === 'win32' ? 'tracker-backend.exe' : 'tracker-backend';
+const BACKEND_EXE_PATH = path.join(RESOURCES_PATH, 'python-backend', BACKEND_EXE_NAME);
 
 function safeString(value) {
   if (value === undefined || value === null) return '';

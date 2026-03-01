@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-FocusRank — One-Click Installer Builder
-========================================
-Produces a single .exe NSIS installer that bundles:
+FocusRank — One-Click Installer Builder (Cross-Platform)
+=========================================================
+Produces a platform-native installer that bundles:
   1. PyInstaller-packaged Python backend (FastAPI + all deps)
   2. Vite-built React frontend
   3. Electron shell
@@ -11,8 +11,10 @@ Produces a single .exe NSIS installer that bundles:
 Usage:
     python BUILD_INSTALLER.py
 
-Output:
-    frontend/dist_electron/FocusRank-Setup-1.0.0.exe
+Output (depends on platform):
+    Windows : frontend/dist_electron/FocusRank-Setup-1.0.0.exe
+    Linux   : frontend/dist_electron/FocusRank-1.0.0-x64.AppImage
+    macOS   : frontend/dist_electron/FocusRank-1.0.0-x64.dmg
 """
 
 import os
@@ -20,11 +22,14 @@ import sys
 import shutil
 import subprocess
 import time
+import platform
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 FRONTEND = ROOT / "frontend"
 BACKEND_DIST = ROOT / "dist" / "tracker-backend"
+
+CURRENT_PLATFORM = sys.platform  # 'win32', 'linux', 'darwin'
 
 # ─────────────────────────────────────────────
 # Helpers
@@ -100,11 +105,13 @@ def build_backend():
     banner("Step 1: Building Python backend (PyInstaller)")
     run([sys.executable, "build_backend.py"], cwd=ROOT)
 
-    if not (BACKEND_DIST / "tracker-backend.exe").exists():
-        print("  ERROR: tracker-backend.exe was not produced!")
+    exe_name = "tracker-backend.exe" if CURRENT_PLATFORM == 'win32' else "tracker-backend"
+    backend_exe = BACKEND_DIST / exe_name
+    if not backend_exe.exists():
+        print(f"  ERROR: {exe_name} was not produced!")
         sys.exit(1)
 
-    size_mb = (BACKEND_DIST / "tracker-backend.exe").stat().st_size / (1024 * 1024)
+    size_mb = backend_exe.stat().st_size / (1024 * 1024)
     print(f"  Backend exe: {size_mb:.1f} MB")
     print(f"  Total dir: {sum(f.stat().st_size for f in BACKEND_DIST.rglob('*') if f.is_file()) / (1024*1024):.1f} MB")
 
@@ -153,14 +160,30 @@ def build_electron():
     if out_dir.exists():
         shutil.rmtree(out_dir, ignore_errors=True)
 
-    # Build the NSIS installer
-    run("npx electron-builder -w --publish never", cwd=FRONTEND, shell=True)
+    # Build the platform-specific installer
+    if CURRENT_PLATFORM == 'win32':
+        run("npx electron-builder -w --publish never", cwd=FRONTEND, shell=True)
+    elif CURRENT_PLATFORM == 'linux':
+        run("npx electron-builder -l --publish never", cwd=FRONTEND, shell=True)
+    elif CURRENT_PLATFORM == 'darwin':
+        run("npx electron-builder -m --publish never", cwd=FRONTEND, shell=True)
+    else:
+        print(f"  ERROR: Unsupported platform: {CURRENT_PLATFORM}")
+        sys.exit(1)
 
     # Find the output
-    installers = list(out_dir.glob("FocusRank-Setup-*.exe"))
-    if not installers:
-        # Also check for any .exe
-        installers = list(out_dir.glob("*.exe"))
+    if CURRENT_PLATFORM == 'win32':
+        installers = list(out_dir.glob("FocusRank-Setup-*.exe"))
+        if not installers:
+            installers = list(out_dir.glob("*.exe"))
+    elif CURRENT_PLATFORM == 'linux':
+        installers = list(out_dir.glob("FocusRank-Setup-*.AppImage"))
+        if not installers:
+            installers = list(out_dir.glob("*.AppImage"))
+    elif CURRENT_PLATFORM == 'darwin':
+        installers = list(out_dir.glob("FocusRank-Setup-*.dmg"))
+        if not installers:
+            installers = list(out_dir.glob("*.dmg"))
     
     if installers:
         for inst in installers:
@@ -168,7 +191,7 @@ def build_electron():
             print(f"  Installer: {inst.name} ({size:.1f} MB)")
         return installers[0]
     else:
-        print("  WARNING: No installer .exe found in dist_electron/")
+        print("  WARNING: No installer found in dist_electron/")
         print("  Contents:", [f.name for f in out_dir.iterdir()] if out_dir.exists() else "empty")
         return None
 
@@ -180,8 +203,10 @@ def build_electron():
 def main():
     start = time.time()
     
-    banner("FocusRank Installer Builder")
+    platform_label = {'win32': 'Windows', 'linux': 'Linux', 'darwin': 'macOS'}.get(CURRENT_PLATFORM, CURRENT_PLATFORM)
+    banner(f"FocusRank Installer Builder ({platform_label})")
     print(f"  Project root: {ROOT}")
+    print(f"  Platform: {platform_label}")
     print(f"  Python: {sys.version}")
     
     preflight()
@@ -196,7 +221,7 @@ def main():
     if installer:
         print(f"  Installer: {installer}")
         print(f"  Size: {installer.stat().st_size / (1024*1024):.1f} MB")
-        print(f"\n  Share this single .exe file with anyone.")
+        print(f"\n  Share this file with anyone on {platform_label}.")
         print(f"  They install it and run FocusRank — no Python/Node needed!\n")
     else:
         print("  Check frontend/dist_electron/ for output files.\n")

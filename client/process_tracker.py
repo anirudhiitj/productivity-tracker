@@ -1,25 +1,33 @@
 """
 Process tracker for capturing foreground window and process information.
-Uses Windows API to poll the active window every 1 second.
+Uses platform-specific APIs to poll the active window every 1 second.
+Supports Windows, Linux, and macOS.
 """
 
-import ctypes
 import logging
+import sys
+import subprocess
+import shutil
 from datetime import datetime
 from typing import Optional, Tuple, Dict
 import psutil
 
 logger = logging.getLogger(__name__)
 
-# Windows API constants and functions
-GetForegroundWindow = ctypes.windll.user32.GetForegroundWindow
-GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
-GetWindowTextW = ctypes.windll.user32.GetWindowTextW
-GetWindowTextLengthW = ctypes.windll.user32.GetWindowTextLengthW
+_PLATFORM = sys.platform  # 'win32', 'linux', 'darwin'
+
+# Windows API constants and functions (only on Windows)
+if _PLATFORM == 'win32':
+    import ctypes
+    from ctypes import wintypes
+    GetForegroundWindow = ctypes.windll.user32.GetForegroundWindow
+    GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
+    GetWindowTextW = ctypes.windll.user32.GetWindowTextW
+    GetWindowTextLengthW = ctypes.windll.user32.GetWindowTextLengthW
 
 
 class ProcessTracker:
-    """Tracks active foreground process and window information on Windows."""
+    """Tracks active foreground process and window information (cross-platform)."""
 
     def __init__(self):
         self.current_process: Optional[Dict] = None
@@ -34,13 +42,34 @@ class ProcessTracker:
             PID of foreground window process, or None if unable to determine.
         """
         try:
-            hwnd = GetForegroundWindow()
-            if not hwnd:
-                return None
+            if _PLATFORM == 'win32':
+                hwnd = GetForegroundWindow()
+                if not hwnd:
+                    return None
+                pid = ctypes.c_ulong()
+                GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                return pid.value if pid.value else None
 
-            pid = ctypes.c_ulong()
-            GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            return pid.value if pid.value else None
+            elif _PLATFORM == 'linux':
+                # Use xdotool to get the active window PID
+                if not shutil.which('xdotool'):
+                    return None
+                wid = subprocess.check_output(
+                    ['xdotool', 'getactivewindow'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                pid_str = subprocess.check_output(
+                    ['xdotool', 'getwindowpid', wid], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                return int(pid_str) if pid_str else None
+
+            elif _PLATFORM == 'darwin':
+                # Use osascript to get the front-most application's PID
+                script = 'tell application "System Events" to unix id of first process whose frontmost is true'
+                result = subprocess.check_output(
+                    ['osascript', '-e', script], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                return int(result) if result else None
+
         except Exception as e:
             logger.error(f"Error getting foreground window PID: {e}")
             return None
@@ -53,19 +82,38 @@ class ProcessTracker:
             Window title string, or None if unable to determine.
         """
         try:
-            hwnd = GetForegroundWindow()
-            if not hwnd:
-                return None
+            if _PLATFORM == 'win32':
+                hwnd = GetForegroundWindow()
+                if not hwnd:
+                    return None
+                length = GetWindowTextLengthW(hwnd)
+                if length == 0:
+                    return None
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                GetWindowTextW(hwnd, buffer, length + 1)
+                return buffer.value
 
-            # Get buffer size
-            length = GetWindowTextLengthW(hwnd)
-            if length == 0:
-                return None
+            elif _PLATFORM == 'linux':
+                if not shutil.which('xdotool'):
+                    return None
+                wid = subprocess.check_output(
+                    ['xdotool', 'getactivewindow'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                title = subprocess.check_output(
+                    ['xdotool', 'getactivewindow', 'getwindowname'], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                return title if title else None
 
-            # Create buffer and get text
-            buffer = ctypes.create_unicode_buffer(length + 1)
-            GetWindowTextW(hwnd, buffer, length + 1)
-            return buffer.value
+            elif _PLATFORM == 'darwin':
+                script = (
+                    'tell application "System Events" to get the title of the '
+                    'front window of (first process whose frontmost is true)'
+                )
+                result = subprocess.check_output(
+                    ['osascript', '-e', script], stderr=subprocess.DEVNULL
+                ).decode().strip()
+                return result if result else None
+
         except Exception as e:
             logger.error(f"Error getting window title: {e}")
             return None
