@@ -162,3 +162,29 @@ launcher_output.txt
 # Environment files
 .env.local
 .env.*.local
+
+# Local launcher scripts and shell wrappers
+*.bat
+
+# Claude temporary files
+tmpclaude-*
+
+# Screen recordings and local media captures
+Screen Recording*
+*.wmv
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+
+# Executables and packaged installers/artifacts
+*.exe
+*.msi
+*.zip
+*.7z
+*.rar
+
+# Local debug/runtime outputs
+debug_output.txt
+*.trace
